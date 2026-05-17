@@ -37,10 +37,10 @@ workflow 会：
 - 跑前端和 Rust 检查。
 - 根据 Secrets 生成 `src-tauri/tauri.release.conf.json`。
 - 使用 `tauri-apps/tauri-action` 以 `--features updater` 构建 NSIS 安装包和 updater artifacts。
-- 创建 draft GitHub Release。
+- 创建并发布 GitHub Release。
 
 ## 应用内更新
 
-Release 构建会内置 Tauri updater 公钥和 endpoint，并生成 `latest.json`。发布前先用 draft Release 下载安装包在干净环境试装；确认无误后把 Release 从 draft 改为 published，否则用户端无法访问 `latest.json`，应用内检查更新会失败。
+Release 构建会内置 Tauri updater 公钥和 endpoint，并生成 `latest.json`。应用内更新地址使用 GitHub 的 `releases/latest/download/latest.json`，因此 Release 必须是 published；如果保持 draft，用户端会收到 GitHub 404，应用内检查更新会失败。
 
 用户可在 Toolbag 的 `设置 > 更新 > 主程序更新` 手动检查并安装更新。若开启“自动检查应用更新”，应用启动后会按设置频率在后台检查，有新版本时弹出更新提示，安装完成后自动重启 Toolbag。

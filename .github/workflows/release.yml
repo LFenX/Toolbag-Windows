@@ -69,6 +69,6 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Toolbag ${{ github.ref_name }}"
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: --features updater --config src-tauri/tauri.release.conf.json
