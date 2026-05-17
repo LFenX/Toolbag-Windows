@@ -109,6 +109,18 @@ struct PushItem<'a> {
     metadata: Option<BTreeMap<String, Value>>,
 }
 
+struct OptionalField<'a> {
+    id: &'a str,
+    category: &'a str,
+    name: &'a str,
+    payload: &'a Value,
+    object: &'a str,
+    key: &'a str,
+    source: &'a str,
+    updated_at: &'a str,
+    tags: Vec<&'a str>,
+}
+
 pub fn collect_environment_snapshot(data_dir: &Path, log_dir: &Path) -> EnvironmentSnapshot {
     let started = Instant::now();
     let generated_at = OffsetDateTime::now_utc()
@@ -159,7 +171,9 @@ pub fn collect_environment_snapshot(data_dir: &Path, log_dir: &Path) -> Environm
 
 fn collect_windows_payload() -> AppResult<Value> {
     if !cfg!(windows) {
-        return Err(AppError::Message("当前系统不是 Windows，已使用预览数据结构。".to_string()));
+        return Err(AppError::Message(
+            "当前系统不是 Windows，已使用预览数据结构。".to_string(),
+        ));
     }
 
     let script = r#"
@@ -474,15 +488,17 @@ fn populate_system_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upda
     ] {
         push_optional_field(
             items,
-            id,
-            "system",
-            label,
-            payload,
-            "os",
-            key,
-            "Win32_OperatingSystem",
-            updated_at,
-            vec!["windows", "system"],
+            OptionalField {
+                id,
+                category: "system",
+                name: label,
+                payload,
+                object: "os",
+                key,
+                source: "Win32_OperatingSystem",
+                updated_at,
+                tags: vec!["windows", "system"],
+            },
         );
     }
 
@@ -495,41 +511,47 @@ fn populate_system_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upda
     ] {
         push_optional_field(
             items,
-            id,
-            "system",
-            label,
-            payload,
-            "computer",
-            key,
-            "Win32_ComputerSystem",
-            updated_at,
-            vec!["computer", "system"],
+            OptionalField {
+                id,
+                category: "system",
+                name: label,
+                payload,
+                object: "computer",
+                key,
+                source: "Win32_ComputerSystem",
+                updated_at,
+                tags: vec!["computer", "system"],
+            },
         );
     }
 
     push_optional_field(
         items,
-        "system-timezone",
-        "system",
-        "时区",
-        payload,
-        "timezone",
-        "DisplayName",
-        "Get-TimeZone",
-        updated_at,
-        vec!["time", "timezone", "system"],
+        OptionalField {
+            id: "system-timezone",
+            category: "system",
+            name: "时区",
+            payload,
+            object: "timezone",
+            key: "DisplayName",
+            source: "Get-TimeZone",
+            updated_at,
+            tags: vec!["time", "timezone", "system"],
+        },
     );
     push_optional_field(
         items,
-        "system-culture",
-        "system",
-        "区域语言",
-        payload,
-        "culture",
-        "DisplayName",
-        "Get-Culture",
-        updated_at,
-        vec!["culture", "locale", "system"],
+        OptionalField {
+            id: "system-culture",
+            category: "system",
+            name: "区域语言",
+            payload,
+            object: "culture",
+            key: "DisplayName",
+            source: "Get-Culture",
+            updated_at,
+            tags: vec!["culture", "locale", "system"],
+        },
     );
 }
 
@@ -583,15 +605,17 @@ fn populate_hardware_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
 
     push_optional_field(
         items,
-        "hardware-bios",
-        "hardware",
-        "BIOS 版本",
-        payload,
-        "bios",
-        "SMBIOSBIOSVersion",
-        "Win32_BIOS",
-        updated_at,
-        vec!["bios", "hardware"],
+        OptionalField {
+            id: "hardware-bios",
+            category: "hardware",
+            name: "BIOS 版本",
+            payload,
+            object: "bios",
+            key: "SMBIOSBIOSVersion",
+            source: "Win32_BIOS",
+            updated_at,
+            tags: vec!["bios", "hardware"],
+        },
     );
 
     if let Some(baseboard) = payload.get("baseboard") {
@@ -612,7 +636,12 @@ fn populate_hardware_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
                 tags: vec!["baseboard", "motherboard", "hardware", "主板"],
                 metadata: metadata_for_fields(
                     baseboard,
-                    &[("manufacturer", "Manufacturer"), ("product", "Product"), ("version", "Version"), ("serial", "SerialNumber")],
+                    &[
+                        ("manufacturer", "Manufacturer"),
+                        ("product", "Product"),
+                        ("version", "Version"),
+                        ("serial", "SerialNumber"),
+                    ],
                 ),
             },
         );
@@ -642,7 +671,11 @@ fn populate_hardware_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
                 tags: vec!["memory", "ram", "module", "内存"],
                 metadata: metadata_for_fields(
                     module,
-                    &[("manufacturer", "Manufacturer"), ("partNumber", "PartNumber"), ("serial", "SerialNumber")],
+                    &[
+                        ("manufacturer", "Manufacturer"),
+                        ("partNumber", "PartNumber"),
+                        ("serial", "SerialNumber"),
+                    ],
                 ),
             },
         );
@@ -707,12 +740,17 @@ fn populate_hardware_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
                 updated_at,
                 status: EnvironmentItemStatus::Info,
                 tags: vec!["battery", "power", "hardware"],
-                metadata: metadata_for_fields(battery, &[("status", "BatteryStatus"), ("runtime", "EstimatedRunTime")]),
+                metadata: metadata_for_fields(
+                    battery,
+                    &[("status", "BatteryStatus"), ("runtime", "EstimatedRunTime")],
+                ),
             },
         );
     });
 
-    if let Some(power_plan) = string_value(payload.get("powerPlan")).filter(|value| !value.is_empty()) {
+    if let Some(power_plan) =
+        string_value(payload.get("powerPlan")).filter(|value| !value.is_empty())
+    {
         push_item(
             items,
             PushItem {
@@ -767,7 +805,13 @@ fn populate_hardware_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
                 updated_at,
                 status: EnvironmentItemStatus::Info,
                 tags: vec!["tpm", "security", "hardware"],
-                metadata: metadata_for_fields(tpm, &[("enabled", "TpmEnabled"), ("manufacturer", "ManufacturerIdTxt")]),
+                metadata: metadata_for_fields(
+                    tpm,
+                    &[
+                        ("enabled", "TpmEnabled"),
+                        ("manufacturer", "ManufacturerIdTxt"),
+                    ],
+                ),
             },
         );
     }
@@ -794,7 +838,14 @@ fn populate_hardware_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
                     EnvironmentItemStatus::Info
                 },
                 tags: vec!["pnp", "device", "hardware"],
-                metadata: metadata_for_fields(device, &[("class", "Class"), ("status", "Status"), ("instanceId", "InstanceId")]),
+                metadata: metadata_for_fields(
+                    device,
+                    &[
+                        ("class", "Class"),
+                        ("status", "Status"),
+                        ("instanceId", "InstanceId"),
+                    ],
+                ),
             },
         );
     });
@@ -886,7 +937,12 @@ fn populate_storage_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upd
                 tags: vec!["partition", "disk", "storage", "分区"],
                 metadata: metadata_for_fields(
                     partition,
-                    &[("type", "Type"), ("isBoot", "IsBoot"), ("isSystem", "IsSystem"), ("isActive", "IsActive")],
+                    &[
+                        ("type", "Type"),
+                        ("isBoot", "IsBoot"),
+                        ("isSystem", "IsSystem"),
+                        ("isActive", "IsActive"),
+                    ],
                 ),
             },
         );
@@ -901,7 +957,11 @@ fn populate_storage_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upd
         let remaining = number_child(volume, "SizeRemaining");
         let value = match (total, remaining) {
             (Some(total), Some(remaining)) => {
-                format!("{} 总计 · {} 可用", format_bytes(total), format_bytes(remaining))
+                format!(
+                    "{} 总计 · {} 可用",
+                    format_bytes(total),
+                    format_bytes(remaining)
+                )
             }
             _ => "容量未知".to_string(),
         };
@@ -919,14 +979,20 @@ fn populate_storage_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upd
                 tags: vec!["volume", "storage", "filesystem"],
                 metadata: metadata_for_fields(
                     volume,
-                    &[("label", "FileSystemLabel"), ("health", "HealthStatus"), ("operational", "OperationalStatus"), ("driveType", "DriveType")],
+                    &[
+                        ("label", "FileSystemLabel"),
+                        ("health", "HealthStatus"),
+                        ("operational", "OperationalStatus"),
+                        ("driveType", "DriveType"),
+                    ],
                 ),
             },
         );
     });
 
     for_each_arrayish(payload.get("bitlocker"), |volume, index| {
-        let mount = child_field(volume, "MountPoint").unwrap_or_else(|| format!("卷 {}", index + 1));
+        let mount =
+            child_field(volume, "MountPoint").unwrap_or_else(|| format!("卷 {}", index + 1));
         let status = child_field(volume, "ProtectionStatus").unwrap_or_else(|| "未知".to_string());
         let percent =
             child_field(volume, "EncryptionPercentage").unwrap_or_else(|| "未知".to_string());
@@ -942,7 +1008,13 @@ fn populate_storage_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upd
                 updated_at,
                 status: EnvironmentItemStatus::Info,
                 tags: vec!["bitlocker", "encryption", "storage", "security"],
-                metadata: metadata_for_fields(volume, &[("volumeStatus", "VolumeStatus"), ("method", "EncryptionMethod")]),
+                metadata: metadata_for_fields(
+                    volume,
+                    &[
+                        ("volumeStatus", "VolumeStatus"),
+                        ("method", "EncryptionMethod"),
+                    ],
+                ),
             },
         );
     });
@@ -1004,7 +1076,14 @@ fn populate_network_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upd
                     EnvironmentItemStatus::Info
                 },
                 tags: vec!["network", "adapter", "link"],
-                metadata: metadata_for_fields(adapter, &[("description", "InterfaceDescription"), ("mac", "MacAddress"), ("index", "InterfaceIndex")]),
+                metadata: metadata_for_fields(
+                    adapter,
+                    &[
+                        ("description", "InterfaceDescription"),
+                        ("mac", "MacAddress"),
+                        ("index", "InterfaceIndex"),
+                    ],
+                ),
             },
         );
     });
@@ -1026,7 +1105,10 @@ fn populate_network_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upd
                 updated_at,
                 status: EnvironmentItemStatus::Info,
                 tags: vec!["route", "network", "gateway"],
-                metadata: metadata_for_fields(route, &[("metric", "RouteMetric"), ("family", "AddressFamily")]),
+                metadata: metadata_for_fields(
+                    route,
+                    &[("metric", "RouteMetric"), ("family", "AddressFamily")],
+                ),
             },
         );
     });
@@ -1047,7 +1129,10 @@ fn populate_network_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upd
                 updated_at,
                 status: EnvironmentItemStatus::Info,
                 tags: vec!["tcp", "port", "listen", "network"],
-                metadata: metadata_for_fields(port, &[("processId", "OwningProcess"), ("state", "State")]),
+                metadata: metadata_for_fields(
+                    port,
+                    &[("processId", "OwningProcess"), ("state", "State")],
+                ),
             },
         );
     });
@@ -1098,7 +1183,12 @@ fn populate_network_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upd
         let exists = child_field(hosts, "Exists").unwrap_or_else(|| "false".to_string());
         let mut metadata = metadata_for_fields(
             hosts,
-            &[("path", "Path"), ("exists", "Exists"), ("size", "Length"), ("lastWriteTime", "LastWriteTime")],
+            &[
+                ("path", "Path"),
+                ("exists", "Exists"),
+                ("size", "Length"),
+                ("lastWriteTime", "LastWriteTime"),
+            ],
         )
         .unwrap_or_default();
         metadata.insert("path".to_string(), Value::String(path.clone()));
@@ -1161,9 +1251,12 @@ fn populate_process_items(payload: &Value, items: &mut Vec<EnvironmentItem>, upd
                 updated_at,
                 status: EnvironmentItemStatus::Info,
                 tags: vec!["process", "memory", "进程"],
-                metadata: path
-                    .and_then(path_metadata)
-                    .or_else(|| metadata_for_fields(process, &[("processId", "Id"), ("window", "MainWindowTitle")])),
+                metadata: path.and_then(path_metadata).or_else(|| {
+                    metadata_for_fields(
+                        process,
+                        &[("processId", "Id"), ("window", "MainWindowTitle")],
+                    )
+                }),
             },
         );
     });
@@ -1292,7 +1385,10 @@ fn populate_path_items(payload: &Value, items: &mut Vec<EnvironmentItem>, update
         },
     );
 
-    for (source, entries) in [("Machine PATH", machine_entries), ("User PATH", user_entries)] {
+    for (source, entries) in [
+        ("Machine PATH", machine_entries),
+        ("User PATH", user_entries),
+    ] {
         for (index, entry) in entries.iter().enumerate() {
             let exists = Path::new(entry).exists();
             push_item(
@@ -1374,7 +1470,11 @@ fn populate_software_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
                 id: &format!("shell-profile-{index}"),
                 category: "software",
                 name: &format!("PowerShell Profile · {scope}"),
-                value: if path.is_empty() { "未配置".to_string() } else { path.clone() },
+                value: if path.is_empty() {
+                    "未配置".to_string()
+                } else {
+                    path.clone()
+                },
                 raw_value: Some(object_raw(Some(profile))),
                 source: "$PROFILE",
                 updated_at,
@@ -1397,7 +1497,17 @@ fn populate_software_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
         let metadata = install_location
             .clone()
             .and_then(path_metadata)
-            .or_else(|| metadata_for_fields(app, &[("publisher", "Publisher"), ("version", "DisplayVersion"), ("scope", "Scope"), ("installDate", "InstallDate")]));
+            .or_else(|| {
+                metadata_for_fields(
+                    app,
+                    &[
+                        ("publisher", "Publisher"),
+                        ("version", "DisplayVersion"),
+                        ("scope", "Scope"),
+                        ("installDate", "InstallDate"),
+                    ],
+                )
+            });
         push_item(
             items,
             PushItem {
@@ -1421,8 +1531,16 @@ fn populate_automation_items(payload: &Value, items: &mut Vec<EnvironmentItem>, 
         let name = child_field(startup, "Name").unwrap_or_else(|| format!("启动项 {}", index + 1));
         let command = child_field(startup, "Command").unwrap_or_default();
         let source = child_field(startup, "Source").unwrap_or_else(|| "Startup".to_string());
-        let metadata = executable_path_metadata(command.clone())
-            .or_else(|| metadata_for_fields(startup, &[("scope", "Scope"), ("source", "Source"), ("command", "Command")]));
+        let metadata = executable_path_metadata(command.clone()).or_else(|| {
+            metadata_for_fields(
+                startup,
+                &[
+                    ("scope", "Scope"),
+                    ("source", "Source"),
+                    ("command", "Command"),
+                ],
+            )
+        });
         push_item(
             items,
             PushItem {
@@ -1445,7 +1563,8 @@ fn populate_automation_items(payload: &Value, items: &mut Vec<EnvironmentItem>, 
     });
 
     for_each_arrayish(payload.get("scheduledTasks"), |task, index| {
-        let name = child_field(task, "TaskName").unwrap_or_else(|| format!("计划任务 {}", index + 1));
+        let name =
+            child_field(task, "TaskName").unwrap_or_else(|| format!("计划任务 {}", index + 1));
         let path = child_field(task, "TaskPath").unwrap_or_else(|| "\\".to_string());
         let state = child_field(task, "State").unwrap_or_else(|| "Unknown".to_string());
         push_item(
@@ -1464,7 +1583,10 @@ fn populate_automation_items(payload: &Value, items: &mut Vec<EnvironmentItem>, 
                     EnvironmentItemStatus::Ok
                 },
                 tags: vec!["scheduled task", "automation", "task"],
-                metadata: metadata_for_fields(task, &[("author", "Author"), ("description", "Description")]),
+                metadata: metadata_for_fields(
+                    task,
+                    &[("author", "Author"), ("description", "Description")],
+                ),
             },
         );
     });
@@ -1472,9 +1594,10 @@ fn populate_automation_items(payload: &Value, items: &mut Vec<EnvironmentItem>, 
 
 fn populate_security_items(payload: &Value, items: &mut Vec<EnvironmentItem>, updated_at: &str) {
     if let Some(defender) = payload.get("defender") {
-        let antivirus = child_field(defender, "AntivirusEnabled").unwrap_or_else(|| "未知".to_string());
-        let realtime =
-            child_field(defender, "RealTimeProtectionEnabled").unwrap_or_else(|| "未知".to_string());
+        let antivirus =
+            child_field(defender, "AntivirusEnabled").unwrap_or_else(|| "未知".to_string());
+        let realtime = child_field(defender, "RealTimeProtectionEnabled")
+            .unwrap_or_else(|| "未知".to_string());
         push_item(
             items,
             PushItem {
@@ -1495,14 +1618,19 @@ fn populate_security_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
                 tags: vec!["defender", "security", "antivirus"],
                 metadata: metadata_for_fields(
                     defender,
-                    &[("signatureUpdated", "AntivirusSignatureLastUpdated"), ("quickScanEnd", "QuickScanEndTime"), ("fullScanEnd", "FullScanEndTime")],
+                    &[
+                        ("signatureUpdated", "AntivirusSignatureLastUpdated"),
+                        ("quickScanEnd", "QuickScanEndTime"),
+                        ("fullScanEnd", "FullScanEndTime"),
+                    ],
                 ),
             },
         );
     }
 
     for_each_arrayish(payload.get("firewallProfiles"), |profile, index| {
-        let name = child_field(profile, "Name").unwrap_or_else(|| format!("防火墙配置 {}", index + 1));
+        let name =
+            child_field(profile, "Name").unwrap_or_else(|| format!("防火墙配置 {}", index + 1));
         let enabled = child_field(profile, "Enabled").unwrap_or_else(|| "未知".to_string());
         push_item(
             items,
@@ -1520,7 +1648,14 @@ fn populate_security_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
                     EnvironmentItemStatus::Ok
                 },
                 tags: vec!["firewall", "security", "network"],
-                metadata: metadata_for_fields(profile, &[("inbound", "DefaultInboundAction"), ("outbound", "DefaultOutboundAction"), ("notify", "NotifyOnListen")]),
+                metadata: metadata_for_fields(
+                    profile,
+                    &[
+                        ("inbound", "DefaultInboundAction"),
+                        ("outbound", "DefaultOutboundAction"),
+                        ("notify", "NotifyOnListen"),
+                    ],
+                ),
             },
         );
     });
@@ -1529,7 +1664,8 @@ fn populate_security_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
         let subject =
             child_field(certificate, "Subject").unwrap_or_else(|| format!("证书 {}", index + 1));
         let store = child_field(certificate, "Store").unwrap_or_else(|| "Cert:\\".to_string());
-        let expires = child_field(certificate, "NotAfter").unwrap_or_else(|| "未知到期时间".to_string());
+        let expires =
+            child_field(certificate, "NotAfter").unwrap_or_else(|| "未知到期时间".to_string());
         push_item(
             items,
             PushItem {
@@ -1542,7 +1678,14 @@ fn populate_security_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
                 updated_at,
                 status: EnvironmentItemStatus::Info,
                 tags: vec!["certificate", "security", "cert"],
-                metadata: metadata_for_fields(certificate, &[("issuer", "Issuer"), ("thumbprint", "Thumbprint"), ("store", "Store")]),
+                metadata: metadata_for_fields(
+                    certificate,
+                    &[
+                        ("issuer", "Issuer"),
+                        ("thumbprint", "Thumbprint"),
+                        ("store", "Store"),
+                    ],
+                ),
             },
         );
     });
@@ -1563,7 +1706,13 @@ fn populate_security_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
                 updated_at,
                 status: EnvironmentItemStatus::Info,
                 tags: vec!["event log", "logs", "security"],
-                metadata: metadata_for_fields(log, &[("maxSize", "MaximumSizeInBytes"), ("lastWriteTime", "LastWriteTime")]),
+                metadata: metadata_for_fields(
+                    log,
+                    &[
+                        ("maxSize", "MaximumSizeInBytes"),
+                        ("lastWriteTime", "LastWriteTime"),
+                    ],
+                ),
             },
         );
     });
@@ -1573,8 +1722,8 @@ fn populate_registry_items(payload: &Value, items: &mut Vec<EnvironmentItem>, up
     if let Some(current_version) = payload.pointer("/registry/currentVersion") {
         let product =
             child_field(current_version, "ProductName").unwrap_or_else(|| "Windows".to_string());
-        let display =
-            child_field(current_version, "DisplayVersion").unwrap_or_else(|| "未知版本".to_string());
+        let display = child_field(current_version, "DisplayVersion")
+            .unwrap_or_else(|| "未知版本".to_string());
         let build =
             child_field(current_version, "CurrentBuild").unwrap_or_else(|| "未知构建".to_string());
         push_item(
@@ -1752,7 +1901,13 @@ fn build_summary(payload: &Value, items: &[EnvironmentItem]) -> Vec<EnvironmentS
 
     vec![
         metric("os", "OS", os_value, os_detail, EnvironmentItemStatus::Ok),
-        metric("cpu", "CPU", cpu_value, "CIM 采集".to_string(), EnvironmentItemStatus::Ok),
+        metric(
+            "cpu",
+            "CPU",
+            cpu_value,
+            "CIM 采集".to_string(),
+            EnvironmentItemStatus::Ok,
+        ),
         metric(
             "memory",
             "Memory",
@@ -1791,7 +1946,12 @@ fn build_summary(payload: &Value, items: &[EnvironmentItem]) -> Vec<EnvironmentS
         metric(
             "permission",
             "Permission",
-            if is_admin { "管理员权限" } else { "普通权限" }.to_string(),
+            if is_admin {
+                "管理员权限"
+            } else {
+                "普通权限"
+            }
+            .to_string(),
             "本地只读".to_string(),
             if is_admin {
                 EnvironmentItemStatus::Warning
@@ -1847,56 +2007,356 @@ struct CategoryDefinition {
 
 fn category_definitions() -> &'static [CategoryDefinition] {
     &[
-        CategoryDefinition { id: "system", parent_id: None, label: "系统概况", description: "Windows 版本、区域时间与计算机身份", prefix: "" },
-        CategoryDefinition { id: "system.os", parent_id: Some("system"), label: "操作系统", description: "版本、构建、启动与安装时间", prefix: "system-" },
-        CategoryDefinition { id: "system.identity", parent_id: Some("system"), label: "计算机身份", description: "主机名、域、型号与注册用户", prefix: "system-computer" },
-        CategoryDefinition { id: "hardware", parent_id: None, label: "硬件资源", description: "CPU、内存、主板、显卡与外设", prefix: "" },
-        CategoryDefinition { id: "hardware.cpu", parent_id: Some("hardware"), label: "CPU", description: "处理器、核心与线程", prefix: "hardware-cpu" },
-        CategoryDefinition { id: "hardware.memory", parent_id: Some("hardware"), label: "内存", description: "总量、可用量与内存条", prefix: "hardware-memory" },
-        CategoryDefinition { id: "hardware.firmware", parent_id: Some("hardware"), label: "主板与固件", description: "BIOS、主板、TPM 与安全启动", prefix: "hardware-" },
-        CategoryDefinition { id: "hardware.display", parent_id: Some("hardware"), label: "显示设备", description: "显卡与显示器", prefix: "display-" },
-        CategoryDefinition { id: "hardware.pnp", parent_id: Some("hardware"), label: "即插即用设备", description: "可读取的 PnP 设备", prefix: "pnp-" },
-        CategoryDefinition { id: "storage", parent_id: None, label: "存储", description: "物理盘、分区、卷与 BitLocker", prefix: "" },
-        CategoryDefinition { id: "storage.volume", parent_id: Some("storage"), label: "卷与文件系统", description: "盘符、容量、剩余空间与文件系统", prefix: "storage-logical" },
-        CategoryDefinition { id: "storage.physical", parent_id: Some("storage"), label: "物理盘与分区", description: "物理磁盘、接口、分区与容量", prefix: "storage-physical" },
-        CategoryDefinition { id: "storage.bitlocker", parent_id: Some("storage"), label: "BitLocker", description: "卷加密与保护状态", prefix: "bitlocker-" },
-        CategoryDefinition { id: "network", parent_id: None, label: "网络", description: "适配器、IP、DNS、路由、端口与代理", prefix: "" },
-        CategoryDefinition { id: "network.adapter", parent_id: Some("network"), label: "适配器", description: "链路、MAC、速率与状态", prefix: "network-adapter" },
-        CategoryDefinition { id: "network.config", parent_id: Some("network"), label: "IP 配置", description: "IP、网关、DHCP 与 DNS", prefix: "network-config" },
-        CategoryDefinition { id: "network.route", parent_id: Some("network"), label: "路由", description: "IPv4/IPv6 路由表", prefix: "route-" },
-        CategoryDefinition { id: "network.port", parent_id: Some("network"), label: "监听端口", description: "TCP/UDP 本地监听端口", prefix: "port-" },
-        CategoryDefinition { id: "network.proxy", parent_id: Some("network"), label: "代理与 hosts", description: "系统代理与 hosts 文件", prefix: "proxy-" },
-        CategoryDefinition { id: "process", parent_id: None, label: "进程", description: "当前运行进程与资源占用", prefix: "" },
-        CategoryDefinition { id: "process.running", parent_id: Some("process"), label: "运行中", description: "进程 ID、内存与路径", prefix: "process-" },
-        CategoryDefinition { id: "service", parent_id: None, label: "服务", description: "Windows 服务状态与启动模式", prefix: "" },
-        CategoryDefinition { id: "service.windows", parent_id: Some("service"), label: "Windows 服务", description: "服务状态、启动模式与命令行", prefix: "service-" },
-        CategoryDefinition { id: "driver", parent_id: None, label: "驱动", description: "系统驱动状态", prefix: "" },
-        CategoryDefinition { id: "driver.system", parent_id: Some("driver"), label: "系统驱动", description: "驱动状态、启动模式与路径", prefix: "driver-" },
-        CategoryDefinition { id: "environment", parent_id: None, label: "环境变量", description: "Machine 与 User 环境变量", prefix: "" },
-        CategoryDefinition { id: "environment.machine", parent_id: Some("environment"), label: "Machine 变量", description: "系统级环境变量", prefix: "env-machine" },
-        CategoryDefinition { id: "environment.user", parent_id: Some("environment"), label: "User 变量", description: "用户级环境变量", prefix: "env-user" },
-        CategoryDefinition { id: "path", parent_id: None, label: "PATH", description: "PATH 条目拆分、来源与路径状态", prefix: "" },
-        CategoryDefinition { id: "path.machine", parent_id: Some("path"), label: "Machine PATH", description: "系统 PATH 条目", prefix: "path-machine" },
-        CategoryDefinition { id: "path.user", parent_id: Some("path"), label: "User PATH", description: "用户 PATH 条目", prefix: "path-user" },
-        CategoryDefinition { id: "software", parent_id: None, label: "软件与运行时", description: "已安装应用、开发运行时与 Shell 配置", prefix: "" },
-        CategoryDefinition { id: "software.installed", parent_id: Some("software"), label: "已安装应用", description: "卸载注册表中可读取的应用", prefix: "software-app" },
-        CategoryDefinition { id: "software.runtime", parent_id: Some("software"), label: "开发运行时", description: "常见 CLI 和运行时路径", prefix: "runtime-" },
-        CategoryDefinition { id: "software.shell", parent_id: Some("software"), label: "Shell 配置", description: "PowerShell 配置文件", prefix: "shell-" },
-        CategoryDefinition { id: "automation", parent_id: None, label: "启动与任务", description: "启动项和计划任务", prefix: "" },
-        CategoryDefinition { id: "automation.startup", parent_id: Some("automation"), label: "启动项", description: "Run 注册表和启动目录", prefix: "startup-" },
-        CategoryDefinition { id: "automation.task", parent_id: Some("automation"), label: "计划任务", description: "Windows 计划任务状态", prefix: "task-" },
-        CategoryDefinition { id: "security", parent_id: None, label: "安全状态", description: "Defender、防火墙、证书与系统保护", prefix: "" },
-        CategoryDefinition { id: "security.defender", parent_id: Some("security"), label: "Defender", description: "Microsoft Defender 状态", prefix: "defender-" },
-        CategoryDefinition { id: "security.firewall", parent_id: Some("security"), label: "防火墙", description: "Windows 防火墙配置文件", prefix: "firewall-" },
-        CategoryDefinition { id: "security.certificate", parent_id: Some("security"), label: "证书", description: "本机和用户证书概览", prefix: "certificate-" },
-        CategoryDefinition { id: "security.logs", parent_id: Some("security"), label: "事件日志", description: "Windows 事件日志概览", prefix: "eventlog-" },
-        CategoryDefinition { id: "registry", parent_id: None, label: "注册表可读项", description: "安全白名单注册表信息", prefix: "" },
-        CategoryDefinition { id: "registry.windows", parent_id: Some("registry"), label: "Windows 项", description: "CurrentVersion 等系统键", prefix: "registry-current" },
-        CategoryDefinition { id: "registry.powershell", parent_id: Some("registry"), label: "PowerShell 项", description: "PowerShell 引擎注册表", prefix: "registry-powershell" },
-        CategoryDefinition { id: "app", parent_id: None, label: "应用目录", description: "Toolbag 数据、日志与运行目录", prefix: "" },
-        CategoryDefinition { id: "app.directory", parent_id: Some("app"), label: "Toolbag 目录", description: "数据、日志与可执行文件", prefix: "app-" },
-        CategoryDefinition { id: "permission", parent_id: None, label: "日志与权限", description: "普通权限、日志目录与只读边界", prefix: "" },
-        CategoryDefinition { id: "permission.boundary", parent_id: Some("permission"), label: "权限边界", description: "身份、执行策略与只读说明", prefix: "permission-" },
+        CategoryDefinition {
+            id: "system",
+            parent_id: None,
+            label: "系统概况",
+            description: "Windows 版本、区域时间与计算机身份",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "system.os",
+            parent_id: Some("system"),
+            label: "操作系统",
+            description: "版本、构建、启动与安装时间",
+            prefix: "system-",
+        },
+        CategoryDefinition {
+            id: "system.identity",
+            parent_id: Some("system"),
+            label: "计算机身份",
+            description: "主机名、域、型号与注册用户",
+            prefix: "system-computer",
+        },
+        CategoryDefinition {
+            id: "hardware",
+            parent_id: None,
+            label: "硬件资源",
+            description: "CPU、内存、主板、显卡与外设",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "hardware.cpu",
+            parent_id: Some("hardware"),
+            label: "CPU",
+            description: "处理器、核心与线程",
+            prefix: "hardware-cpu",
+        },
+        CategoryDefinition {
+            id: "hardware.memory",
+            parent_id: Some("hardware"),
+            label: "内存",
+            description: "总量、可用量与内存条",
+            prefix: "hardware-memory",
+        },
+        CategoryDefinition {
+            id: "hardware.firmware",
+            parent_id: Some("hardware"),
+            label: "主板与固件",
+            description: "BIOS、主板、TPM 与安全启动",
+            prefix: "hardware-",
+        },
+        CategoryDefinition {
+            id: "hardware.display",
+            parent_id: Some("hardware"),
+            label: "显示设备",
+            description: "显卡与显示器",
+            prefix: "display-",
+        },
+        CategoryDefinition {
+            id: "hardware.pnp",
+            parent_id: Some("hardware"),
+            label: "即插即用设备",
+            description: "可读取的 PnP 设备",
+            prefix: "pnp-",
+        },
+        CategoryDefinition {
+            id: "storage",
+            parent_id: None,
+            label: "存储",
+            description: "物理盘、分区、卷与 BitLocker",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "storage.volume",
+            parent_id: Some("storage"),
+            label: "卷与文件系统",
+            description: "盘符、容量、剩余空间与文件系统",
+            prefix: "storage-logical",
+        },
+        CategoryDefinition {
+            id: "storage.physical",
+            parent_id: Some("storage"),
+            label: "物理盘与分区",
+            description: "物理磁盘、接口、分区与容量",
+            prefix: "storage-physical",
+        },
+        CategoryDefinition {
+            id: "storage.bitlocker",
+            parent_id: Some("storage"),
+            label: "BitLocker",
+            description: "卷加密与保护状态",
+            prefix: "bitlocker-",
+        },
+        CategoryDefinition {
+            id: "network",
+            parent_id: None,
+            label: "网络",
+            description: "适配器、IP、DNS、路由、端口与代理",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "network.adapter",
+            parent_id: Some("network"),
+            label: "适配器",
+            description: "链路、MAC、速率与状态",
+            prefix: "network-adapter",
+        },
+        CategoryDefinition {
+            id: "network.config",
+            parent_id: Some("network"),
+            label: "IP 配置",
+            description: "IP、网关、DHCP 与 DNS",
+            prefix: "network-config",
+        },
+        CategoryDefinition {
+            id: "network.route",
+            parent_id: Some("network"),
+            label: "路由",
+            description: "IPv4/IPv6 路由表",
+            prefix: "route-",
+        },
+        CategoryDefinition {
+            id: "network.port",
+            parent_id: Some("network"),
+            label: "监听端口",
+            description: "TCP/UDP 本地监听端口",
+            prefix: "port-",
+        },
+        CategoryDefinition {
+            id: "network.proxy",
+            parent_id: Some("network"),
+            label: "代理与 hosts",
+            description: "系统代理与 hosts 文件",
+            prefix: "proxy-",
+        },
+        CategoryDefinition {
+            id: "process",
+            parent_id: None,
+            label: "进程",
+            description: "当前运行进程与资源占用",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "process.running",
+            parent_id: Some("process"),
+            label: "运行中",
+            description: "进程 ID、内存与路径",
+            prefix: "process-",
+        },
+        CategoryDefinition {
+            id: "service",
+            parent_id: None,
+            label: "服务",
+            description: "Windows 服务状态与启动模式",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "service.windows",
+            parent_id: Some("service"),
+            label: "Windows 服务",
+            description: "服务状态、启动模式与命令行",
+            prefix: "service-",
+        },
+        CategoryDefinition {
+            id: "driver",
+            parent_id: None,
+            label: "驱动",
+            description: "系统驱动状态",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "driver.system",
+            parent_id: Some("driver"),
+            label: "系统驱动",
+            description: "驱动状态、启动模式与路径",
+            prefix: "driver-",
+        },
+        CategoryDefinition {
+            id: "environment",
+            parent_id: None,
+            label: "环境变量",
+            description: "Machine 与 User 环境变量",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "environment.machine",
+            parent_id: Some("environment"),
+            label: "Machine 变量",
+            description: "系统级环境变量",
+            prefix: "env-machine",
+        },
+        CategoryDefinition {
+            id: "environment.user",
+            parent_id: Some("environment"),
+            label: "User 变量",
+            description: "用户级环境变量",
+            prefix: "env-user",
+        },
+        CategoryDefinition {
+            id: "path",
+            parent_id: None,
+            label: "PATH",
+            description: "PATH 条目拆分、来源与路径状态",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "path.machine",
+            parent_id: Some("path"),
+            label: "Machine PATH",
+            description: "系统 PATH 条目",
+            prefix: "path-machine",
+        },
+        CategoryDefinition {
+            id: "path.user",
+            parent_id: Some("path"),
+            label: "User PATH",
+            description: "用户 PATH 条目",
+            prefix: "path-user",
+        },
+        CategoryDefinition {
+            id: "software",
+            parent_id: None,
+            label: "软件与运行时",
+            description: "已安装应用、开发运行时与 Shell 配置",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "software.installed",
+            parent_id: Some("software"),
+            label: "已安装应用",
+            description: "卸载注册表中可读取的应用",
+            prefix: "software-app",
+        },
+        CategoryDefinition {
+            id: "software.runtime",
+            parent_id: Some("software"),
+            label: "开发运行时",
+            description: "常见 CLI 和运行时路径",
+            prefix: "runtime-",
+        },
+        CategoryDefinition {
+            id: "software.shell",
+            parent_id: Some("software"),
+            label: "Shell 配置",
+            description: "PowerShell 配置文件",
+            prefix: "shell-",
+        },
+        CategoryDefinition {
+            id: "automation",
+            parent_id: None,
+            label: "启动与任务",
+            description: "启动项和计划任务",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "automation.startup",
+            parent_id: Some("automation"),
+            label: "启动项",
+            description: "Run 注册表和启动目录",
+            prefix: "startup-",
+        },
+        CategoryDefinition {
+            id: "automation.task",
+            parent_id: Some("automation"),
+            label: "计划任务",
+            description: "Windows 计划任务状态",
+            prefix: "task-",
+        },
+        CategoryDefinition {
+            id: "security",
+            parent_id: None,
+            label: "安全状态",
+            description: "Defender、防火墙、证书与系统保护",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "security.defender",
+            parent_id: Some("security"),
+            label: "Defender",
+            description: "Microsoft Defender 状态",
+            prefix: "defender-",
+        },
+        CategoryDefinition {
+            id: "security.firewall",
+            parent_id: Some("security"),
+            label: "防火墙",
+            description: "Windows 防火墙配置文件",
+            prefix: "firewall-",
+        },
+        CategoryDefinition {
+            id: "security.certificate",
+            parent_id: Some("security"),
+            label: "证书",
+            description: "本机和用户证书概览",
+            prefix: "certificate-",
+        },
+        CategoryDefinition {
+            id: "security.logs",
+            parent_id: Some("security"),
+            label: "事件日志",
+            description: "Windows 事件日志概览",
+            prefix: "eventlog-",
+        },
+        CategoryDefinition {
+            id: "registry",
+            parent_id: None,
+            label: "注册表可读项",
+            description: "安全白名单注册表信息",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "registry.windows",
+            parent_id: Some("registry"),
+            label: "Windows 项",
+            description: "CurrentVersion 等系统键",
+            prefix: "registry-current",
+        },
+        CategoryDefinition {
+            id: "registry.powershell",
+            parent_id: Some("registry"),
+            label: "PowerShell 项",
+            description: "PowerShell 引擎注册表",
+            prefix: "registry-powershell",
+        },
+        CategoryDefinition {
+            id: "app",
+            parent_id: None,
+            label: "应用目录",
+            description: "Toolbag 数据、日志与运行目录",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "app.directory",
+            parent_id: Some("app"),
+            label: "Toolbag 目录",
+            description: "数据、日志与可执行文件",
+            prefix: "app-",
+        },
+        CategoryDefinition {
+            id: "permission",
+            parent_id: None,
+            label: "日志与权限",
+            description: "普通权限、日志目录与只读边界",
+            prefix: "",
+        },
+        CategoryDefinition {
+            id: "permission.boundary",
+            parent_id: Some("permission"),
+            label: "权限边界",
+            description: "身份、执行策略与只读说明",
+            prefix: "permission-",
+        },
     ]
 }
 
@@ -1965,31 +2425,20 @@ fn push_env_map(
     }
 }
 
-fn push_optional_field(
-    items: &mut Vec<EnvironmentItem>,
-    id: &'static str,
-    category: &'static str,
-    name: &'static str,
-    payload: &Value,
-    object: &str,
-    key: &str,
-    source: &'static str,
-    updated_at: &str,
-    tags: Vec<&'static str>,
-) {
-    let value = field(payload, object, key);
+fn push_optional_field(items: &mut Vec<EnvironmentItem>, input: OptionalField<'_>) {
+    let value = field(input.payload, input.object, input.key);
     push_item(
         items,
         PushItem {
-            id,
-            category,
-            name,
+            id: input.id,
+            category: input.category,
+            name: input.name,
             value: value.unwrap_or_else(|| "未读取到".to_string()),
             raw_value: None,
-            source,
-            updated_at,
+            source: input.source,
+            updated_at: input.updated_at,
             status: EnvironmentItemStatus::Info,
-            tags,
+            tags: input.tags,
             metadata: None,
         },
     );
@@ -2030,7 +2479,10 @@ fn infer_subcategory(category: &str, id: &str) -> (Option<String>, Option<String
         .unwrap_or((None, None))
 }
 
-fn subcategory_definition_for_item(category: &str, id: &str) -> Option<&'static CategoryDefinition> {
+fn subcategory_definition_for_item(
+    category: &str,
+    id: &str,
+) -> Option<&'static CategoryDefinition> {
     let subcategory_id = match category {
         "system"
             if id.starts_with("system-computer")
@@ -2043,112 +2495,42 @@ fn subcategory_definition_for_item(category: &str, id: &str) -> Option<&'static 
             "system.identity"
         }
         "system" => "system.os",
-        "hardware"
-            if id.starts_with("hardware-cpu") =>
-        {
-            "hardware.cpu"
-        }
-        "hardware"
-            if id.starts_with("hardware-memory") || id.starts_with("memory-module") =>
-        {
+        "hardware" if id.starts_with("hardware-cpu") => "hardware.cpu",
+        "hardware" if id.starts_with("hardware-memory") || id.starts_with("memory-module") => {
             "hardware.memory"
         }
-        "hardware"
-            if id.starts_with("hardware-gpu") || id.starts_with("display-") =>
-        {
+        "hardware" if id.starts_with("hardware-gpu") || id.starts_with("display-") => {
             "hardware.display"
         }
-        "hardware"
-            if id.starts_with("pnp-") =>
-        {
-            "hardware.pnp"
-        }
+        "hardware" if id.starts_with("pnp-") => "hardware.pnp",
         "hardware" => "hardware.firmware",
-        "storage"
-            if id.starts_with("storage-logical") || id.starts_with("volume-") =>
-        {
+        "storage" if id.starts_with("storage-logical") || id.starts_with("volume-") => {
             "storage.volume"
         }
-        "storage"
-            if id.starts_with("bitlocker-") =>
-        {
-            "storage.bitlocker"
-        }
+        "storage" if id.starts_with("bitlocker-") => "storage.bitlocker",
         "storage" => "storage.physical",
-        "network"
-            if id.starts_with("network-adapter") =>
-        {
-            "network.adapter"
-        }
-        "network"
-            if id.starts_with("network-config") =>
-        {
-            "network.config"
-        }
-        "network"
-            if id.starts_with("route-") =>
-        {
-            "network.route"
-        }
-        "network"
-            if id.starts_with("port-") =>
-        {
-            "network.port"
-        }
+        "network" if id.starts_with("network-adapter") => "network.adapter",
+        "network" if id.starts_with("network-config") => "network.config",
+        "network" if id.starts_with("route-") => "network.route",
+        "network" if id.starts_with("port-") => "network.port",
         "network" => "network.proxy",
         "process" => "process.running",
         "service" => "service.windows",
         "driver" => "driver.system",
-        "environment"
-            if id.starts_with("env-machine") =>
-        {
-            "environment.machine"
-        }
+        "environment" if id.starts_with("env-machine") => "environment.machine",
         "environment" => "environment.user",
-        "path"
-            if id.starts_with("path-machine") =>
-        {
-            "path.machine"
-        }
+        "path" if id.starts_with("path-machine") => "path.machine",
         "path" => "path.user",
-        "software"
-            if id.starts_with("software-app") =>
-        {
-            "software.installed"
-        }
-        "software"
-            if id.starts_with("runtime-") =>
-        {
-            "software.runtime"
-        }
+        "software" if id.starts_with("software-app") => "software.installed",
+        "software" if id.starts_with("runtime-") => "software.runtime",
         "software" => "software.shell",
-        "automation"
-            if id.starts_with("startup-") =>
-        {
-            "automation.startup"
-        }
+        "automation" if id.starts_with("startup-") => "automation.startup",
         "automation" => "automation.task",
-        "security"
-            if id.starts_with("defender-") =>
-        {
-            "security.defender"
-        }
-        "security"
-            if id.starts_with("firewall-") =>
-        {
-            "security.firewall"
-        }
-        "security"
-            if id.starts_with("eventlog-") =>
-        {
-            "security.logs"
-        }
+        "security" if id.starts_with("defender-") => "security.defender",
+        "security" if id.starts_with("firewall-") => "security.firewall",
+        "security" if id.starts_with("eventlog-") => "security.logs",
         "security" => "security.certificate",
-        "registry"
-            if id.starts_with("registry-powershell") =>
-        {
-            "registry.powershell"
-        }
+        "registry" if id.starts_with("registry-powershell") => "registry.powershell",
         "registry" => "registry.windows",
         "app" => "app.directory",
         "permission" => "permission.boundary",
@@ -2230,7 +2612,10 @@ fn category_status(items: &[&EnvironmentItem]) -> EnvironmentItemStatus {
     if items.is_empty() {
         return EnvironmentItemStatus::Empty;
     }
-    if items.iter().any(|item| item.status == EnvironmentItemStatus::Error) {
+    if items
+        .iter()
+        .any(|item| item.status == EnvironmentItemStatus::Error)
+    {
         return EnvironmentItemStatus::Error;
     }
     if items
@@ -2239,7 +2624,10 @@ fn category_status(items: &[&EnvironmentItem]) -> EnvironmentItemStatus {
     {
         return EnvironmentItemStatus::Warning;
     }
-    if items.iter().all(|item| item.status == EnvironmentItemStatus::Ok) {
+    if items
+        .iter()
+        .all(|item| item.status == EnvironmentItemStatus::Ok)
+    {
         return EnvironmentItemStatus::Ok;
     }
     EnvironmentItemStatus::Info
@@ -2319,7 +2707,9 @@ fn normalize_windows_json_date(value: &str) -> Option<String> {
 
 fn number_value(value: Option<&Value>) -> Option<u64> {
     match value? {
-        Value::Number(number) => number.as_u64().or_else(|| number.as_f64().map(|value| value as u64)),
+        Value::Number(number) => number
+            .as_u64()
+            .or_else(|| number.as_f64().map(|value| value as u64)),
         Value::String(value) => value.parse::<u64>().ok(),
         _ => None,
     }
@@ -2376,10 +2766,7 @@ fn object_raw(value: Option<&Value>) -> String {
         .unwrap_or_default()
 }
 
-fn metadata_for_fields(
-    value: &Value,
-    fields: &[(&str, &str)],
-) -> Option<BTreeMap<String, Value>> {
+fn metadata_for_fields(value: &Value, fields: &[(&str, &str)]) -> Option<BTreeMap<String, Value>> {
     let mut metadata = BTreeMap::new();
     for (metadata_key, source_key) in fields {
         if let Some(child) = value.get(*source_key).and_then(metadata_value) {
@@ -2397,10 +2784,7 @@ fn metadata_value(value: &Value) -> Option<Value> {
         }
         Value::Number(_) | Value::Bool(_) => Some(value.clone()),
         Value::Array(values) => {
-            let normalized = values
-                .iter()
-                .filter_map(metadata_value)
-                .collect::<Vec<_>>();
+            let normalized = values.iter().filter_map(metadata_value).collect::<Vec<_>>();
             (!normalized.is_empty()).then_some(Value::Array(normalized))
         }
         Value::Object(_) | Value::Null => None,
@@ -2484,7 +2868,10 @@ fn empty_as_unknown(value: &str) -> String {
 }
 
 fn count_category(items: &[EnvironmentItem], category: &str) -> usize {
-    items.iter().filter(|item| item.category == category).count()
+    items
+        .iter()
+        .filter(|item| item.category == category)
+        .count()
 }
 
 fn extract_json_object(text: &str) -> Option<&str> {
@@ -2581,7 +2968,10 @@ mod tests {
         let mut warning = ok.clone();
         warning.status = EnvironmentItemStatus::Warning;
 
-        assert_eq!(category_status(&[&ok, &warning]), EnvironmentItemStatus::Warning);
+        assert_eq!(
+            category_status(&[&ok, &warning]),
+            EnvironmentItemStatus::Warning
+        );
     }
 
     #[test]

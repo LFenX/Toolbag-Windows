@@ -36,6 +36,12 @@ import { Badge } from "../../shared/ui/badge";
 import { Button } from "../../shared/ui/button";
 import { Input } from "../../shared/ui/input";
 import { useSettings, useSaveSettings } from "../settings/useSettings";
+import {
+  formatDuration,
+  formatLastResult,
+  formatLastRun,
+  getRiskDisplay,
+} from "../tools/display";
 import type { ToolDefinition } from "../tools/types";
 import { useTools } from "../tools/useTools";
 
@@ -504,6 +510,7 @@ function ToolGrid({
       {pagedTools.map((tool) => {
         const Icon = tool.icon;
         const favorite = favoriteIds.has(tool.id);
+        const risk = getRiskDisplay(tool.riskLevel);
 
         return (
           <Link
@@ -547,9 +554,7 @@ function ToolGrid({
             </p>
             <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
               <span>{tool.category}</span>
-              <Badge variant={tool.riskLevel === "safe" ? "success" : "warning"}>
-                {tool.riskLevel === "safe" ? "安全" : "谨慎"}
-              </Badge>
+              <Badge variant={risk.badgeVariant}>{risk.label}</Badge>
             </div>
           </Link>
         );
@@ -570,6 +575,7 @@ function ToolRow({
   tool: ToolDefinition;
 }) {
   const Icon = tool.icon;
+  const risk = getRiskDisplay(tool.riskLevel);
 
   return (
     <tr
@@ -612,9 +618,7 @@ function ToolRow({
         </p>
       </td>
       <td className="px-3 py-3 align-middle">
-        <Badge variant={tool.riskLevel === "safe" ? "success" : "warning"}>
-          {tool.riskLevel === "safe" ? "安全" : "谨慎"}
-        </Badge>
+        <Badge variant={risk.badgeVariant}>{risk.label}</Badge>
       </td>
       <td className="px-3 py-3 text-center align-middle">
         <Button
@@ -633,7 +637,7 @@ function ToolRow({
         </Button>
       </td>
       <td className="px-3 py-3 align-middle text-muted-foreground">
-        {tool.lastRunAt}
+        {formatLastRun(tool.lastRunAt)}
       </td>
     </tr>
   );
@@ -742,6 +746,8 @@ function ToolInspector({
   }
 
   const Icon = selectedTool.icon;
+  const risk = getRiskDisplay(selectedTool.riskLevel);
+  const lastResult = formatLastResult(selectedTool.lastResult);
 
   return (
     <>
@@ -804,8 +810,8 @@ function ToolInspector({
             <InspectorRow label="分类" value={selectedTool.category} />
             <InspectorRow
               label="风险级别"
-              value={selectedTool.riskLevel === "safe" ? "安全" : "谨慎"}
-              valueClassName="text-emerald-700"
+              value={risk.label}
+              valueClassName={risk.valueClassName}
             />
             <InspectorRow label="权限要求" value={selectedTool.permissionRequirement} />
             <InspectorRow label="数据访问" value={selectedTool.dataAccess} />
@@ -842,7 +848,7 @@ function ToolInspector({
           <Clock3 className="size-4 text-muted-foreground" aria-hidden="true" />
         </div>
         <dl className="space-y-3 text-sm">
-          <InspectorRow label="最后运行" value={selectedTool.lastRunAt} />
+          <InspectorRow label="最后运行" value={formatLastRun(selectedTool.lastRunAt)} />
           <InspectorRow label="运行次数" value={String(selectedTool.runCount)} />
           <InspectorRow
             label="平均耗时"
@@ -850,8 +856,8 @@ function ToolInspector({
           />
           <InspectorRow
             label="最后结果"
-            value={selectedTool.lastResult === "success" ? "成功" : "未运行"}
-            valueClassName="text-emerald-700"
+            value={lastResult}
+            valueClassName={selectedTool.lastResult === "success" ? "text-emerald-700" : undefined}
           />
         </dl>
       </section>
@@ -993,11 +999,4 @@ function MenuPanel({
       {children}
     </div>
   );
-}
-
-function formatDuration(durationMs: number) {
-  if (durationMs < 1000) {
-    return "< 1 秒";
-  }
-  return `${(durationMs / 1000).toFixed(1)} 秒`;
 }

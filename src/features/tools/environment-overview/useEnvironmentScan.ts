@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   cancelEnvironmentScan,
@@ -34,6 +35,7 @@ function tauriStartFn(): Promise<string> {
 }
 
 export function useEnvironmentScan() {
+  const queryClient = useQueryClient();
   const callbacks = useMemo(
     () => ({
       onStarted(p: ScanJobStartedPayload) {
@@ -47,15 +49,17 @@ export function useEnvironmentScan() {
       },
       onDone(p: ScanJobDonePayload) {
         useEnvironmentScanStore.getState().completeJob(p);
+        void queryClient.invalidateQueries({ queryKey: ["tools"] });
       },
       onCancelled() {
         useEnvironmentScanStore.getState().cancelJob();
+        void queryClient.invalidateQueries({ queryKey: ["tools"] });
       },
       onError() {
         useEnvironmentScanStore.getState().setError();
       },
     }),
-    [],
+    [queryClient],
   );
 
   const { start, cancel, jobIdRef } = useToolJob<
@@ -69,6 +73,7 @@ export function useEnvironmentScan() {
     cancelFn: cancelEnvironmentScan,
     callbacks,
     enabled: IS_TAURI,
+    startOnMount: true,
   });
 
   return { startScan: start, cancelScan: cancel, jobIdRef };

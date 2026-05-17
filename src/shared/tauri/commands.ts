@@ -6,11 +6,12 @@ import {
   defaultSettings,
   type EnvironmentSnapshot,
   fallbackEnvironmentSnapshot,
-  fallbackTools,
   type LogExport,
   type ReleaseStatus,
   type ToolManifest,
 } from "./types";
+import { fallbackTools, toolManifestListSchema } from "../tools/manifest";
+import { appSettingsSchema } from "./validation";
 
 function isTauriRuntime() {
   return (
@@ -43,15 +44,18 @@ export async function getAppInfo(): Promise<AppInfo> {
 }
 
 export async function listTools(): Promise<ToolManifest[]> {
-  return invokeOrFallback("list_tools", () => fallbackTools);
+  const tools = await invokeOrFallback("list_tools", () => fallbackTools);
+  return toolManifestListSchema.parse(tools);
 }
 
 export async function getSettings(): Promise<AppSettings> {
-  return invokeOrFallback("get_settings", () => defaultSettings);
+  const settings = await invokeOrFallback("get_settings", () => defaultSettings);
+  return appSettingsSchema.parse(settings);
 }
 
 export async function saveSettings(settings: AppSettings): Promise<AppSettings> {
-  return invokeOrFallback("save_settings", () => settings, { settings });
+  const saved = await invokeOrFallback("save_settings", () => settings, { settings });
+  return appSettingsSchema.parse(saved);
 }
 
 export async function getReleaseStatus(): Promise<ReleaseStatus> {

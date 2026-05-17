@@ -1,32 +1,54 @@
 import { MonitorCog } from "lucide-react";
 
 import { EnvironmentOverviewTool } from "./environment-overview/EnvironmentOverviewTool";
-import type { ToolDefinition } from "./types";
+import type { ToolManifest } from "../../shared/tauri/types";
+import type { LocalToolRegistration, ToolDefinition } from "./types";
 
-export const localToolRegistry: ToolDefinition[] = [
+export const localToolRegistry: LocalToolRegistration[] = [
   {
     id: "environment-overview",
-    name: "环境概览",
-    description: "查看 Toolbag 当前运行环境、应用信息和 Windows 本机环境信息。",
-    category: "系统",
-    version: "1.0.0",
     icon: MonitorCog,
-    routePath: "/tools/environment-overview",
-    tags: ["系统", "诊断", "只读"],
-    riskLevel: "safe",
-    requiresElevation: false,
-    permissionRequirement: "普通权限",
-    dataAccess: "仅读取本地环境信息",
-    detailDescription:
-      "展示本机操作系统、CPU、内存、磁盘、网卡、进程、服务、驱动、环境变量和常用只读配置。",
-    lastRunAt: "刚刚",
-    runCount: 1,
-    averageDurationMs: 800,
-    lastResult: "success",
     component: EnvironmentOverviewTool,
   },
 ];
 
-export function getLocalTool(toolId: string) {
-  return localToolRegistry.find((tool) => tool.id === toolId);
+export function composeToolDefinitions(
+  manifests: ToolManifest[],
+  localRegistrations: LocalToolRegistration[] = localToolRegistry,
+): ToolDefinition[] {
+  const registrationsById = new Map<string, LocalToolRegistration>();
+
+  for (const registration of localRegistrations) {
+    if (registrationsById.has(registration.id)) {
+      throw new Error(`Tool ${registration.id} has duplicate frontend registrations.`);
+    }
+    registrationsById.set(registration.id, registration);
+  }
+
+  const manifestIds = new Set<string>();
+  const definitions = manifests.map((manifest) => {
+    if (manifestIds.has(manifest.id)) {
+      throw new Error(`Tool ${manifest.id} has duplicate manifests.`);
+    }
+    manifestIds.add(manifest.id);
+
+    const localTool = registrationsById.get(manifest.id);
+    if (!localTool) {
+      throw new Error(`Tool ${manifest.id} is missing a frontend component.`);
+    }
+
+    return {
+      ...manifest,
+      icon: localTool.icon,
+      component: localTool.component,
+    };
+  });
+
+  for (const registration of localRegistrations) {
+    if (!manifestIds.has(registration.id)) {
+      throw new Error(`Tool ${registration.id} is missing a manifest.`);
+    }
+  }
+
+  return definitions;
 }

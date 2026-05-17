@@ -1,4 +1,4 @@
-/// Elevation helpers for Windows UAC.
+//! Elevation helpers for Windows UAC.
 
 /// Returns true if the current process is running with administrator privileges.
 pub fn is_elevated() -> bool {

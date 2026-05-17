@@ -1,12 +1,12 @@
 use std::fs;
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::elevation;
-use crate::errors::AppResult;
 use crate::environment::EnvironmentSnapshot;
+use crate::errors::AppResult;
 use crate::models::{AppInfo, AppSettings, LogExport, ReleaseStatus, ToolManifest};
 use crate::state::AppState;
 
@@ -26,8 +26,8 @@ pub fn get_app_info(state: State<'_, AppState>) -> AppResult<AppInfo> {
 }
 
 #[tauri::command]
-pub fn list_tools() -> Vec<ToolManifest> {
-    crate::tools::list_tools()
+pub fn list_tools(state: State<'_, AppState>) -> AppResult<Vec<ToolManifest>> {
+    crate::tools::list_tools(state.database())
 }
 
 #[tauri::command]
@@ -109,16 +109,13 @@ pub async fn start_environment_scan(
     let log_dir = state.log_dir().to_path_buf();
     let is_admin = elevation::is_elevated();
 
-    // Retrieve the managed state pointer so we can clean up after completion.
-    // SAFETY: AppState is a managed singleton that lives for the entire app lifetime.
-    use tauri::Manager;
-    let state_ptr = app.state::<AppState>().inner() as *const AppState as usize;
-
+    let app_for_scan = app.clone();
+    let app_for_cleanup = app.clone();
     let job_id_c = job_id.clone();
 
     tauri::async_runtime::spawn(async move {
-        crate::environment::scan::start_scan(
-            app,
+        let outcome = crate::environment::scan::start_scan(
+            app_for_scan,
             job_id_c.clone(),
             data_dir,
             log_dir,
@@ -127,10 +124,33 @@ pub async fn start_environment_scan(
         )
         .await;
 
-        // Clean up the cancel flag now that the job is finished.
-        // SAFETY: AppState is kept alive by Tauri's managed state for the entire app lifetime.
-        let s = unsafe { &*(state_ptr as *const AppState) };
-        s.remove_scan(&job_id_c);
+        let managed_state = app_for_cleanup.state::<AppState>();
+        if let Err(error) = managed_state.database().record_tool_run(
+            "environment-overview",
+            outcome.result,
+            Some(outcome.duration_ms),
+            outcome.message.as_deref(),
+        ) {
+            log::warn!("failed to record environment scan run: {error}");
+        }
+        match outcome.result {
+            crate::models::LastResult::Cancelled => {
+                let _ = app_for_cleanup.emit(
+                    "env://job-cancelled",
+                    serde_json::json!({ "jobId": &job_id_c }),
+                );
+            }
+            _ => {
+                let _ = app_for_cleanup.emit(
+                    "env://job-done",
+                    serde_json::json!({
+                        "jobId": &job_id_c,
+                        "durationMs": outcome.duration_ms,
+                    }),
+                );
+            }
+        }
+        managed_state.remove_scan(&job_id_c);
     });
 
     Ok(job_id)

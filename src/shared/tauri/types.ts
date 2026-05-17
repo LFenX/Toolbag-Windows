@@ -1,6 +1,7 @@
 export type RiskLevel = "safe" | "caution" | "elevated";
+export type LastResult = "success" | "failed" | "cancelled" | "never";
 
-export interface ToolManifest {
+export interface ToolManifestMetadata {
   id: string;
   name: string;
   description: string;
@@ -13,10 +14,13 @@ export interface ToolManifest {
   permissionRequirement: string;
   dataAccess: string;
   detailDescription: string;
-  lastRunAt: string;
+}
+
+export interface ToolManifest extends ToolManifestMetadata {
+  lastRunAt: string | null;
   runCount: number;
-  averageDurationMs: number;
-  lastResult: "success" | "failed" | "never";
+  averageDurationMs: number | null;
+  lastResult: LastResult;
 }
 
 export interface AppInfo {
@@ -153,27 +157,7 @@ export const defaultSettings: AppSettings = {
   telemetryEnabled: false,
 };
 
-export const fallbackTools: ToolManifest[] = [
-  {
-    id: "environment-overview",
-    name: "环境概览",
-    description: "查看 Toolbag 当前运行环境、应用信息和 Windows 本机环境信息。",
-    category: "系统",
-    version: "1.0.0",
-    routePath: "/tools/environment-overview",
-    tags: ["系统", "诊断", "只读"],
-    riskLevel: "safe",
-    requiresElevation: false,
-    permissionRequirement: "普通权限",
-    dataAccess: "仅读取本地环境信息",
-    detailDescription:
-      "展示本机操作系统、CPU、内存、磁盘、网卡、进程、服务、驱动、环境变量和常用只读配置。",
-    lastRunAt: "刚刚",
-    runCount: 1,
-    averageDurationMs: 800,
-    lastResult: "success",
-  },
-];
+export { fallbackTools } from "../tools/manifest";
 
 const previewGeneratedAt = "2026-05-11T11:32:00.000Z";
 const previewUpdatedAt = "2026-05-11 19:32";

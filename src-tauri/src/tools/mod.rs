@@ -1,24 +1,71 @@
-use crate::models::{LastResult, RiskLevel, ToolManifest};
+use std::collections::HashSet;
 
-pub fn list_tools() -> Vec<ToolManifest> {
-    vec![ToolManifest {
-        id: "environment-overview".to_string(),
-        name: "环境概览".to_string(),
-        description: "查看 Toolbag 当前运行环境、应用信息和 Windows 本机环境信息。".to_string(),
-        category: "系统".to_string(),
-        version: "1.0.0".to_string(),
-        route_path: "/tools/environment-overview".to_string(),
-        tags: vec!["系统".to_string(), "诊断".to_string(), "只读".to_string()],
-        risk_level: RiskLevel::Safe,
-        requires_elevation: false,
-        permission_requirement: "普通权限".to_string(),
-        data_access: "仅读取本地环境信息".to_string(),
-        detail_description:
-            "展示本机操作系统、CPU、内存、磁盘、网卡、进程、服务、驱动、环境变量和常用只读配置。"
-                .to_string(),
-        last_run_at: "刚刚".to_string(),
-        run_count: 1,
-        average_duration_ms: 800,
-        last_result: LastResult::Success,
-    }]
+use crate::database::Database;
+use crate::errors::{AppError, AppResult};
+use crate::models::{StaticToolManifest, ToolManifest};
+
+const TOOL_MANIFEST_JSON: &str = include_str!("../../../src/shared/tools/manifest.json");
+
+pub fn list_tools(database: &Database) -> AppResult<Vec<ToolManifest>> {
+    static_tool_manifests()?
+        .into_iter()
+        .map(|metadata| {
+            let summary = database.tool_run_summary(&metadata.id)?;
+            Ok(ToolManifest::from_metadata(metadata, summary))
+        })
+        .collect()
+}
+
+fn static_tool_manifests() -> AppResult<Vec<StaticToolManifest>> {
+    let manifests: Vec<StaticToolManifest> = serde_json::from_str(TOOL_MANIFEST_JSON)?;
+    validate_static_tool_manifests(&manifests)?;
+    Ok(manifests)
+}
+
+fn validate_static_tool_manifests(manifests: &[StaticToolManifest]) -> AppResult<()> {
+    let mut ids = HashSet::new();
+    let mut routes = HashSet::new();
+
+    for manifest in manifests {
+        if manifest.id.trim().is_empty() {
+            return Err(AppError::Message(
+                "tool manifest contains an empty id".to_string(),
+            ));
+        }
+        if !ids.insert(manifest.id.as_str()) {
+            return Err(AppError::Message(format!(
+                "duplicate tool manifest id: {}",
+                manifest.id
+            )));
+        }
+        if !routes.insert(manifest.route_path.as_str()) {
+            return Err(AppError::Message(format!(
+                "duplicate tool route: {}",
+                manifest.route_path
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_manifest_parses() {
+        let manifests = static_tool_manifests().expect("manifest");
+
+        assert!(manifests
+            .iter()
+            .any(|manifest| manifest.id == "environment-overview"));
+    }
+
+    #[test]
+    fn shared_manifest_ids_and_routes_are_unique() {
+        let manifests = static_tool_manifests().expect("manifest");
+
+        validate_static_tool_manifests(&manifests).expect("unique manifest");
+    }
 }

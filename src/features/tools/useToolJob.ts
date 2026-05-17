@@ -1,4 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
+import type { RefObject } from "react";
 import { useCallback, useEffect, useRef } from "react";
 
 export interface ToolJobCallbacks<TStarted, TItems, TGroupDone, TDone> {
@@ -20,22 +21,33 @@ export interface UseToolJobOptions<TStarted, TItems, TGroupDone, TDone> {
   callbacks: ToolJobCallbacks<TStarted, TItems, TGroupDone, TDone>;
   /**
    * When false, skips Tauri event registration and calls `startFn` directly.
-   * Use to opt-out in browser preview mode. Default: true.
+   * Use to opt out in browser preview mode. Default: true.
    */
   enabled?: boolean;
+  /** Start once after listeners are ready. Default: false. */
+  startOnMount?: boolean;
 }
 
 export interface ToolJobControls {
   start: () => Promise<void>;
   cancel: () => void;
-  jobIdRef: React.RefObject<string | null>;
+  jobIdRef: RefObject<string | null>;
+}
+
+function payloadJobId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const jobId = (payload as { jobId?: unknown }).jobId;
+  return typeof jobId === "string" && jobId.length > 0 ? jobId : null;
 }
 
 /**
  * Generic hook that wires Tauri streaming job events and exposes
  * `start` / `cancel` controls. Each tool provides its own state updates
- * via `callbacks`. Listeners are always registered before `startFn` is
- * called to avoid race conditions.
+ * via `callbacks`. Listeners are registered before optional auto-start
+ * to avoid race conditions.
  */
 export function useToolJob<TStarted, TItems, TGroupDone, TDone>({
   eventPrefix: prefix,
@@ -43,31 +55,47 @@ export function useToolJob<TStarted, TItems, TGroupDone, TDone>({
   cancelFn,
   callbacks,
   enabled = true,
+  startOnMount = false,
 }: UseToolJobOptions<TStarted, TItems, TGroupDone, TDone>): ToolJobControls {
   const jobIdRef = useRef<string | null>(null);
+  const ignoredJobIdsRef = useRef<Set<string>>(new Set());
   const cbRef = useRef(callbacks);
 
-  // Keep cbRef current without triggering effect re-runs.
   useEffect(() => {
     cbRef.current = callbacks;
   });
 
+  const isCurrentJobPayload = useCallback((payload: unknown) => {
+    const eventJobId = payloadJobId(payload);
+    return Boolean(eventJobId && eventJobId === jobIdRef.current);
+  }, []);
+
   const start = useCallback(async () => {
-    // Cancel any running job before starting a new one.
     if (jobIdRef.current) {
-      try { await cancelFn(jobIdRef.current); } catch { /* best-effort */ }
+      const previousJobId = jobIdRef.current;
+      ignoredJobIdsRef.current.add(previousJobId);
       jobIdRef.current = null;
+      try {
+        await cancelFn(previousJobId);
+      } catch {
+        // best-effort cancellation before replacement
+      }
     }
+
     try {
       const id = await startFn();
-      jobIdRef.current = id;
+      if (!ignoredJobIdsRef.current.has(id)) {
+        jobIdRef.current = id;
+      }
     } catch (err: unknown) {
       cbRef.current.onError?.(err);
     }
-  }, [startFn, cancelFn]);
+  }, [cancelFn, startFn]);
 
   const cancel = useCallback(() => {
-    if (jobIdRef.current) void cancelFn(jobIdRef.current);
+    if (jobIdRef.current) {
+      void cancelFn(jobIdRef.current);
+    }
   }, [cancelFn]);
 
   useEffect(() => {
@@ -76,48 +104,74 @@ export function useToolJob<TStarted, TItems, TGroupDone, TDone>({
 
     async function setup() {
       if (!enabled) {
-        await start();
+        if (startOnMount) {
+          await start();
+        }
         return;
       }
 
       const fns = await Promise.all([
-        listen<TStarted>(`${prefix}://job-started`, (e) => {
+        listen<TStarted>(`${prefix}://job-started`, (event) => {
           if (!active) return;
-          const jobId = (e.payload as { jobId?: string }).jobId ?? "";
+          const jobId = payloadJobId(event.payload);
+          if (!jobId || ignoredJobIdsRef.current.has(jobId)) return;
+          if (jobIdRef.current && jobIdRef.current !== jobId) return;
+
           jobIdRef.current = jobId;
-          cbRef.current.onStarted?.(e.payload, jobId);
+          cbRef.current.onStarted?.(event.payload, jobId);
         }),
-        listen<TItems>(`${prefix}://items`, (e) => {
-          if (active) cbRef.current.onItems?.(e.payload);
+        listen<TItems>(`${prefix}://items`, (event) => {
+          if (active && isCurrentJobPayload(event.payload)) {
+            cbRef.current.onItems?.(event.payload);
+          }
         }),
-        listen<TGroupDone>(`${prefix}://group-done`, (e) => {
-          if (active) cbRef.current.onGroupDone?.(e.payload);
+        listen<TGroupDone>(`${prefix}://group-done`, (event) => {
+          if (active && isCurrentJobPayload(event.payload)) {
+            cbRef.current.onGroupDone?.(event.payload);
+          }
         }),
-        listen<TDone>(`${prefix}://job-done`, (e) => {
-          if (active) cbRef.current.onDone?.(e.payload);
+        listen<TDone>(`${prefix}://job-done`, (event) => {
+          if (!active || !isCurrentJobPayload(event.payload)) return;
+          cbRef.current.onDone?.(event.payload);
+          jobIdRef.current = null;
         }),
-        listen<unknown>(`${prefix}://job-cancelled`, () => {
-          if (active) cbRef.current.onCancelled?.();
+        listen<unknown>(`${prefix}://job-cancelled`, (event) => {
+          if (!active || !isCurrentJobPayload(event.payload)) return;
+          cbRef.current.onCancelled?.();
+          jobIdRef.current = null;
         }),
       ]).catch((err: unknown) => {
         if (active) cbRef.current.onError?.(err);
         return [] as (() => void)[];
       });
 
-      if (!active) { fns.forEach((f) => { f(); }); return; }
+      if (!active) {
+        fns.forEach((cleanup) => {
+          cleanup();
+        });
+        return;
+      }
+
       cleanupFns.push(...fns);
 
-      await start();
+      if (startOnMount) {
+        await start();
+      }
     }
 
     void setup();
 
     return () => {
       active = false;
-      cleanupFns.forEach((f) => { f(); });
+      cleanupFns.forEach((cleanup) => {
+        cleanup();
+      });
+      if (jobIdRef.current) {
+        void cancelFn(jobIdRef.current);
+        jobIdRef.current = null;
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefix, enabled]); // prefix and enabled are static per tool
+  }, [cancelFn, enabled, isCurrentJobPayload, prefix, start, startOnMount]);
 
   return { start, cancel, jobIdRef };
 }

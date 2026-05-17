@@ -224,10 +224,10 @@ export function AppShell({ children }: PropsWithChildren) {
         <main className="min-w-0 px-4 py-5 max-lg:px-3">
           <div
             className={cn(
-              "min-h-[calc(100vh-40px)]",
+              "min-h-[calc(100vh-40px)] w-full",
               isToolRoute
-                ? "w-full max-w-none lg:h-[calc(100vh-40px)]"
-                : "mx-auto max-w-[1500px]",
+                ? "max-w-none lg:h-[calc(100vh-40px)]"
+                : "max-w-none",
             )}
           >
             {children}

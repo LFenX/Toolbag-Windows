@@ -1,16 +1,16 @@
-/// Streaming parallel environment scanner.
-///
-/// Splits the monolithic PowerShell scan into independent per-category groups that
-/// run concurrently. Each group emits Tauri events as it completes so the frontend
-/// can render results progressively instead of waiting for the full scan.
-///
-/// Event protocol:
-///   env://job-started   { jobId, isAdmin, generatedAt }
-///   env://group-started { jobId, group }
-///   env://items         { jobId, group, items: EnvironmentItem[] }
-///   env://group-done    { jobId, group, itemCount, status }  status = "done"|"failed"
-///   env://job-done      { jobId, durationMs, totalItems }
-///   env://job-cancelled { jobId }
+//! Streaming parallel environment scanner.
+//!
+//! Splits the monolithic PowerShell scan into independent per-category groups that
+//! run concurrently. Each group emits Tauri events as it completes so the frontend
+//! can render results progressively instead of waiting for the full scan.
+//!
+//! Event protocol:
+//!   env://job-started   { jobId, isAdmin, generatedAt }
+//!   env://group-started { jobId, group }
+//!   env://items         { jobId, group, items: EnvironmentItem[] }
+//!   env://group-done    { jobId, group, itemCount, status }  status = "done"|"failed"
+//!   env://job-done      { jobId, durationMs, totalItems }
+//!   env://job-cancelled { jobId }
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,8 +23,9 @@ use tauri::Emitter;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
-use crate::environment::{EnvironmentItem, dispatch_group};
+use crate::environment::{dispatch_group, EnvironmentItem};
 use crate::errors::AppError;
+use crate::models::LastResult;
 
 // ── Scan group definitions ────────────────────────────────────────────────────
 
@@ -36,18 +37,51 @@ struct ScanGroup {
 }
 
 static GROUPS: &[ScanGroup] = &[
-    ScanGroup { id: "fast",         ps_script: ps_fast },
-    ScanGroup { id: "hardware",     ps_script: ps_hardware },
-    ScanGroup { id: "storage",      ps_script: ps_storage },
-    ScanGroup { id: "network",      ps_script: ps_network },
-    ScanGroup { id: "process",      ps_script: ps_process },
-    ScanGroup { id: "service_driver", ps_script: ps_service_driver },
-    ScanGroup { id: "software",     ps_script: ps_software },
-    ScanGroup { id: "automation",   ps_script: ps_automation },
-    ScanGroup { id: "security",     ps_script: ps_security },
+    ScanGroup {
+        id: "fast",
+        ps_script: ps_fast,
+    },
+    ScanGroup {
+        id: "hardware",
+        ps_script: ps_hardware,
+    },
+    ScanGroup {
+        id: "storage",
+        ps_script: ps_storage,
+    },
+    ScanGroup {
+        id: "network",
+        ps_script: ps_network,
+    },
+    ScanGroup {
+        id: "process",
+        ps_script: ps_process,
+    },
+    ScanGroup {
+        id: "service_driver",
+        ps_script: ps_service_driver,
+    },
+    ScanGroup {
+        id: "software",
+        ps_script: ps_software,
+    },
+    ScanGroup {
+        id: "automation",
+        ps_script: ps_automation,
+    },
+    ScanGroup {
+        id: "security",
+        ps_script: ps_security,
+    },
 ];
 
 // ── Public entry point ────────────────────────────────────────────────────────
+
+pub struct ScanOutcome {
+    pub result: LastResult,
+    pub duration_ms: u128,
+    pub message: Option<String>,
+}
 
 pub async fn start_scan(
     app: AppHandle,
@@ -56,7 +90,7 @@ pub async fn start_scan(
     log_dir: PathBuf,
     is_admin: bool,
     cancel: Arc<AtomicBool>,
-) {
+) -> ScanOutcome {
     let started = Instant::now();
     let generated_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)
@@ -90,31 +124,61 @@ pub async fn start_scan(
 
         let handle = tauri::async_runtime::spawn_blocking(move || {
             if cancel_c.load(Ordering::Relaxed) {
-                return;
+                return false;
             }
-            let _ = app_c.emit("env://group-started", serde_json::json!({
-                "jobId": &job_id_c, "group": group_id,
-            }));
+            let _ = app_c.emit(
+                "env://group-started",
+                serde_json::json!({
+                    "jobId": &job_id_c, "group": group_id,
+                }),
+            );
 
             let mut items: Vec<EnvironmentItem> = Vec::new();
 
             match run_group_script(&script) {
                 Ok(payload) => {
-                    dispatch_group(group_id, &payload, &data_dir_c, &log_dir_c, &mut items, &generated_at_c);
+                    dispatch_group(
+                        group_id,
+                        &payload,
+                        &data_dir_c,
+                        &log_dir_c,
+                        &mut items,
+                        &generated_at_c,
+                    );
+                    if cancel_c.load(Ordering::Relaxed) {
+                        return false;
+                    }
                     let count = items.len();
-                    let _ = app_c.emit("env://items", serde_json::json!({
-                        "jobId": &job_id_c, "group": group_id, "items": &items,
-                    }));
-                    let _ = app_c.emit("env://group-done", serde_json::json!({
-                        "jobId": &job_id_c, "group": group_id,
-                        "itemCount": count, "status": "done",
-                    }));
+                    let _ = app_c.emit(
+                        "env://items",
+                        serde_json::json!({
+                            "jobId": &job_id_c, "group": group_id, "items": &items,
+                        }),
+                    );
+                    if cancel_c.load(Ordering::Relaxed) {
+                        return false;
+                    }
+                    let _ = app_c.emit(
+                        "env://group-done",
+                        serde_json::json!({
+                            "jobId": &job_id_c, "group": group_id,
+                            "itemCount": count, "status": "done",
+                        }),
+                    );
+                    false
                 }
                 Err(err) => {
-                    let _ = app_c.emit("env://group-done", serde_json::json!({
-                        "jobId": &job_id_c, "group": group_id,
-                        "status": "failed", "error": err.to_string(),
-                    }));
+                    if cancel_c.load(Ordering::Relaxed) {
+                        return false;
+                    }
+                    let _ = app_c.emit(
+                        "env://group-done",
+                        serde_json::json!({
+                            "jobId": &job_id_c, "group": group_id,
+                            "status": "failed", "error": err.to_string(),
+                        }),
+                    );
+                    true
                 }
             }
         });
@@ -122,20 +186,34 @@ pub async fn start_scan(
         handles.push(handle);
     }
 
+    let mut failed_groups = 0_u32;
     for handle in handles {
-        let _ = handle.await;
+        if handle.await.unwrap_or(true) {
+            failed_groups += 1;
+        }
     }
 
+    let duration_ms = started.elapsed().as_millis();
     if cancel.load(Ordering::Relaxed) {
-        let _ = app.emit("env://job-cancelled", serde_json::json!({ "jobId": &job_id }));
+        ScanOutcome {
+            result: LastResult::Cancelled,
+            duration_ms,
+            message: Some("用户取消扫描".to_string()),
+        }
     } else {
-        let _ = app.emit(
-            "env://job-done",
-            serde_json::json!({
-                "jobId": &job_id,
-                "durationMs": started.elapsed().as_millis(),
-            }),
-        );
+        if failed_groups > 0 {
+            ScanOutcome {
+                result: LastResult::Failed,
+                duration_ms,
+                message: Some(format!("{failed_groups} 个扫描组失败")),
+            }
+        } else {
+            ScanOutcome {
+                result: LastResult::Success,
+                duration_ms,
+                message: None,
+            }
+        }
     }
 }
 

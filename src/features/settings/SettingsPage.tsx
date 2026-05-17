@@ -16,7 +16,7 @@ export function SettingsPage() {
   const isDirty = draft !== null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="w-full space-y-4">
       <section className="rounded-lg border border-border bg-card px-6 py-5 shadow-panel">
         <h1 className="text-xl font-semibold tracking-normal">设置</h1>
         <p className="mt-1 text-sm text-muted-foreground">
