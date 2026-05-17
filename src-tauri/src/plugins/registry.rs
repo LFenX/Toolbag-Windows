@@ -5,7 +5,8 @@
 
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 
 use crate::database::{Database, RegistryCacheRow};
 use crate::errors::{AppError, AppResult, ErrorCode};
@@ -86,8 +87,38 @@ pub struct RegistryEntry {
     pub size: Option<u64>,
     #[serde(default)]
     pub changelog: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_author")]
     pub author: Option<String>,
+}
+
+fn deserialize_optional_author<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(author)) => Ok(non_empty(author)),
+        Some(Value::Object(author)) => {
+            let name = author
+                .get("name")
+                .and_then(Value::as_str)
+                .or_else(|| author.get("url").and_then(Value::as_str))
+                .map(ToOwned::to_owned);
+            Ok(name.and_then(non_empty))
+        }
+        Some(other) => Err(de::Error::custom(format!(
+            "expected author string or object, got {other}"
+        ))),
+    }
+}
+
+fn non_empty(value: String) -> Option<String> {
+    if value.trim().is_empty() {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 pub struct Registry<'a> {
@@ -193,5 +224,44 @@ mod tests {
     fn bundled_index_parses() {
         let idx = bundled_index().expect("bundled");
         assert!(idx.schema_version >= 1);
+    }
+
+    #[test]
+    fn registry_entry_accepts_author_string() {
+        let entry: RegistryEntry = serde_json::from_str(
+            r#"{
+                "id": "com.lfen.toolbag.hash-and-base64",
+                "name": "Hash & Base64",
+                "description": "Hash tools",
+                "category": "utility",
+                "latestVersion": "0.1.0",
+                "downloadUrl": "https://example.com/plugin.tbpkg",
+                "publishedAt": "2026-05-17T00:00:00Z",
+                "author": "LFen"
+            }"#,
+        )
+        .expect("author string");
+        assert_eq!(entry.author.as_deref(), Some("LFen"));
+    }
+
+    #[test]
+    fn registry_entry_accepts_author_object() {
+        let entry: RegistryEntry = serde_json::from_str(
+            r#"{
+                "id": "com.lfen.toolbag.hash-and-base64",
+                "name": "Hash & Base64",
+                "description": "Hash tools",
+                "category": "utility",
+                "latestVersion": "0.1.0",
+                "downloadUrl": "https://example.com/plugin.tbpkg",
+                "publishedAt": "2026-05-17T00:00:00Z",
+                "author": {
+                    "name": "LFen",
+                    "url": "https://github.com/LFenX"
+                }
+            }"#,
+        )
+        .expect("author object");
+        assert_eq!(entry.author.as_deref(), Some("LFen"));
     }
 }
