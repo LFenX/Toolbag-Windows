@@ -5,15 +5,13 @@ import type { PropsWithChildren } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fallbackTools } from "../../shared/tauri/types";
-import { ToolPage } from "./ToolPage";
+import { ToolView } from "./ToolView";
 
 const mocks = vi.hoisted(() => ({
-  useParams: vi.fn(),
   useTools: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-  useParams: mocks.useParams,
   Link: ({ children, ...rest }: PropsWithChildren<Record<string, unknown>>) => {
     void rest;
     return <a href="#">{children}</a>;
@@ -30,7 +28,6 @@ function MergedTool() {
 }
 
 beforeEach(() => {
-  mocks.useParams.mockReturnValue({ toolId: "com.lfen.toolbag.environment-overview" });
   mocks.useTools.mockReturnValue({
     data: [
       {
@@ -47,17 +44,19 @@ function Wrapper({ children }: PropsWithChildren) {
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 }
 
-describe("ToolPage", () => {
+describe("ToolView", () => {
   it("renders the builtin component for the environment-overview tool", () => {
-    render(<ToolPage />, { wrapper: Wrapper });
+    render(
+      <ToolView toolId="com.lfen.toolbag.environment-overview" />,
+      { wrapper: Wrapper },
+    );
 
     // EnvironmentOverviewTool is the registered builtin renderer and renders the page heading.
     expect(screen.getByRole("heading", { name: "环境概览" })).toBeInTheDocument();
   });
 
   it("shows the not-found state for an unknown tool id", () => {
-    mocks.useParams.mockReturnValue({ toolId: "unknown-tool" });
-    render(<ToolPage />, { wrapper: Wrapper });
+    render(<ToolView toolId="unknown-tool" />, { wrapper: Wrapper });
 
     expect(screen.getByText("工具不存在")).toBeInTheDocument();
   });

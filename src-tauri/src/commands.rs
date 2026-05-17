@@ -202,6 +202,26 @@ pub fn cancel_plugin_command(job_id: String, state: State<'_, AppState>) -> bool
     state.plugins().cancel(&job_id)
 }
 
+/// Tears down a persistent sidecar process for the given plugin. Subsequent
+/// `start_plugin_command` calls will spawn a fresh process. No-op when no
+/// persistent session is open.
+#[tauri::command]
+pub fn shutdown_plugin_session(plugin_id: String, state: State<'_, AppState>) -> bool {
+    state.plugins().shutdown_session(&plugin_id)
+}
+
+/// Sends an arbitrary NDJSON frame to a persistent sidecar's stdin. Useful
+/// for interactive protocols (e.g. forwarding user input to a child process
+/// the sidecar manages). Errors if no persistent session is open.
+#[tauri::command]
+pub fn send_plugin_frame(
+    plugin_id: String,
+    frame: Value,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    state.plugins().send_frame(&plugin_id, frame)
+}
+
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> AppResult<AppSettings> {
     state.database().get_settings()
@@ -228,6 +248,12 @@ pub fn get_release_status(_app: AppHandle) -> ReleaseStatus {
 #[tauri::command]
 pub fn check_for_updates(_app: AppHandle) -> AppResult<ReleaseStatus> {
     crate::updates::check(env!("CARGO_PKG_VERSION"))
+}
+
+#[tauri::command]
+pub fn restart_app(app: AppHandle) -> AppResult<()> {
+    app.request_restart();
+    Ok(())
 }
 
 #[tauri::command]

@@ -9,7 +9,7 @@ pub fn current_status(current_version: &str) -> ReleaseStatus {
         update_available: false,
         latest_version: None,
         checked_at: None,
-        message: "更新器已预留，等待配置 GitHub Release 签名与端点。".to_string(),
+        message: updater_status_message().to_string(),
     }
 }
 
@@ -21,6 +21,10 @@ pub fn check(current_version: &str) -> AppResult<ReleaseStatus> {
         update_available: false,
         latest_version: None,
         checked_at: Some(checked_at),
-        message: "已完成本地更新检查；发布端点尚未配置。".to_string(),
+        message: updater_status_message().to_string(),
     })
+}
+
+fn updater_status_message() -> &'static str {
+    "更新器已接入，请在设置页使用主程序更新完成检查、下载、安装和重启。"
 }

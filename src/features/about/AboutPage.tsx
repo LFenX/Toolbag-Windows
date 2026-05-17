@@ -77,7 +77,7 @@ export function AboutPage() {
         <PanelBody>
           <dl className="grid gap-3 sm:grid-cols-2">
             <AboutRow label="应用名称" value={appInfo?.name ?? "Toolbag"} />
-            <AboutRow label="当前版本" value={appInfo?.version ?? "0.2.0"} />
+            <AboutRow label="当前版本" value={appInfo?.version ?? "0.2.1"} />
             <AboutRow
               label="应用标识"
               value={appInfo?.identifier ?? "com.lfen.toolbag"}

@@ -1,6 +1,6 @@
 [package]
 name = "toolbag"
-version = "0.2.0"
+version = "0.2.1"
 description = "A Windows-first local toolkit workbench."
 authors = ["LFen"]
 edition = "2021"
@@ -9,7 +9,7 @@ repository = "https://github.com/LFenX/toolbag-windows"
 
 [features]
 default = []
-updater = ["dep:tauri-plugin-updater"]
+updater = []
 
 [lib]
 name = "toolbag_lib"
@@ -26,7 +26,7 @@ serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-opener = "2"
-tauri-plugin-updater = { version = "2", optional = true }
+tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 thiserror = "2"
 time = { version = "0.3", features = ["formatting"] }

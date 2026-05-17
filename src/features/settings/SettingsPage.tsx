@@ -1,4 +1,5 @@
 import {
+  Download,
   FolderOpen,
   Lock,
   Monitor,
@@ -37,6 +38,13 @@ import {
 import { Button } from "../../shared/ui/button";
 import { Input } from "../../shared/ui/input";
 import { Switch } from "../../shared/ui/switch";
+import {
+  checkForAppUpdate,
+  formatBytes,
+  getAppUpdateProgressPercent,
+  installAppUpdate,
+  useAppUpdateStore,
+} from "../updates/app-update-store";
 import { useSaveSettings, useSettings } from "./useSettings";
 
 type Section = "general" | "appearance" | "updates" | "plugins" | "privacy" | "advanced";
@@ -384,6 +392,17 @@ function UpdatesSection({
   draft: AppSettings;
   onChange: (patch: Partial<AppSettings>) => void;
 }) {
+  const updatePhase = useAppUpdateStore((state) => state.phase);
+  const updateInfo = useAppUpdateStore((state) => state.info);
+  const updateMessage = useAppUpdateStore((state) => state.message);
+  const downloadedBytes = useAppUpdateStore((state) => state.downloadedBytes);
+  const contentLength = useAppUpdateStore((state) => state.contentLength);
+  const progress = getAppUpdateProgressPercent(downloadedBytes, contentLength);
+  const updateBusy =
+    updatePhase === "checking" ||
+    updatePhase === "downloading" ||
+    updatePhase === "installing";
+
   return (
     <SectionCard
       title="更新"
@@ -398,6 +417,52 @@ function UpdatesSection({
             checked={draft.appAutoUpdate}
             onClick={() => { onChange({ appAutoUpdate: !draft.appAutoUpdate }); }}
           />
+        }
+      />
+      <SettingRow
+        label="主程序更新"
+        description={appUpdateDescription(updatePhase, updateMessage, updateInfo?.latestVersion)}
+        control={
+          <div className="flex min-w-64 flex-col items-start gap-2 sm:items-end">
+            {(updatePhase === "downloading" || updatePhase === "installing") && (
+              <div className="w-full sm:w-64">
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      "h-full rounded-full bg-primary transition-all",
+                      progress === null && "w-1/3 animate-pulse",
+                    )}
+                    style={progress === null ? undefined : { width: `${String(progress)}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-right text-xs text-muted-foreground">
+                  {progress === null
+                    ? formatBytes(downloadedBytes)
+                    : `${String(progress)}% · ${formatBytes(downloadedBytes)} / ${formatBytes(contentLength ?? 0)}`}
+                </p>
+              </div>
+            )}
+            <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={updateBusy}
+                onClick={() => { void checkForAppUpdate(draft); }}
+              >
+                <RefreshCw
+                  className={cn("size-4", updatePhase === "checking" && "animate-spin")}
+                  aria-hidden="true"
+                />
+                {updatePhase === "checking" ? "检查中…" : "检查更新"}
+              </Button>
+              {updatePhase === "available" && (
+                <Button size="sm" onClick={() => { void installAppUpdate(draft); }}>
+                  <Download className="size-4" aria-hidden="true" />
+                  安装并重启
+                </Button>
+              )}
+            </div>
+          </div>
         }
       />
       <SettingRow
@@ -456,6 +521,18 @@ function UpdatesSection({
       />
     </SectionCard>
   );
+}
+
+function appUpdateDescription(
+  phase: string,
+  message: string,
+  latestVersion?: string,
+) {
+  if (message) return message;
+  if (phase === "available" && latestVersion) {
+    return `发现 Toolbag ${latestVersion}，可以在应用内完成下载和安装。`;
+  }
+  return "手动检查主程序版本，发现新版后可直接安装并重启。";
 }
 
 function PluginsSection({

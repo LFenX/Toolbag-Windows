@@ -69,6 +69,22 @@ pub enum RuntimeKind {
     Sidecar,
 }
 
+/// How long the sidecar process should live.
+///
+/// - `Ephemeral` (default): spawn → one request → result → exit. Cheap and
+///   simple; appropriate for stateless utilities (hash, encode, lookup).
+/// - `Persistent`: spawn once and keep running across requests. The same
+///   sidecar receives many NDJSON request frames over its stdin and answers
+///   each by `id`. Use this for tools that hold expensive state (open
+///   sessions, db connections, child processes, caches).
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SidecarLifecycle {
+    #[default]
+    Ephemeral,
+    Persistent,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginRuntime {
@@ -83,6 +99,8 @@ pub struct PluginRuntime {
     pub startup_timeout_ms: u64,
     #[serde(default = "default_shutdown_timeout")]
     pub shutdown_timeout_ms: u64,
+    #[serde(default)]
+    pub lifecycle: SidecarLifecycle,
 }
 
 fn default_startup_timeout() -> u64 {

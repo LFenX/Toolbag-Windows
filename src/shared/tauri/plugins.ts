@@ -21,7 +21,7 @@ export async function listRegistryPlugins(
     return {
       schemaVersion: 1,
       generatedAt: new Date().toISOString(),
-      appVersion: { stable: "0.2.0" },
+      appVersion: { stable: "0.2.1" },
       categories: [],
       plugins: [],
       source: "bundled",
@@ -87,4 +87,26 @@ export async function startPluginCommand(
 
 export async function cancelPluginCommand(jobId: string): Promise<boolean> {
   return call<boolean>("cancel_plugin_command", { jobId });
+}
+
+/**
+ * Tells the host to tear down a persistent sidecar process for `pluginId`.
+ * Ephemeral plugins ignore this. Use it when closing the last tab for a
+ * persistent-lifecycle plugin so the OS process exits instead of lingering.
+ */
+export async function shutdownPluginSession(pluginId: string): Promise<boolean> {
+  return call<boolean>("shutdown_plugin_session", { pluginId });
+}
+
+/**
+ * Sends a raw NDJSON frame into a persistent sidecar's stdin. Use it when
+ * the standard `request → result` flow isn't enough — e.g., to push input
+ * lines into a tool that wraps a child REPL process. Errors if the sidecar
+ * isn't currently running.
+ */
+export async function sendPluginFrame(
+  pluginId: string,
+  frame: Record<string, unknown>,
+): Promise<void> {
+  await call<null>("send_plugin_frame", { pluginId, frame });
 }

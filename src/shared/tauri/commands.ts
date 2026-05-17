@@ -40,7 +40,7 @@ async function invokeOrFallback<T>(
 export async function getAppInfo(): Promise<AppInfo> {
   return invokeOrFallback("get_app_info", () => ({
     name: "Toolbag",
-    version: "0.2.0",
+    version: "0.2.1",
     identifier: "com.lfen.toolbag",
     buildProfile: "browser-preview",
     dataDir: "浏览器预览模式未连接本地数据目录",
@@ -66,7 +66,7 @@ export async function saveSettings(settings: AppSettings): Promise<AppSettings> 
 
 export async function getReleaseStatus(): Promise<ReleaseStatus> {
   return invokeOrFallback("get_release_status", () => ({
-    currentVersion: "0.2.0",
+    currentVersion: "0.2.1",
     updateAvailable: false,
     message: "浏览器预览模式不会检查更新。",
   }));
@@ -74,11 +74,15 @@ export async function getReleaseStatus(): Promise<ReleaseStatus> {
 
 export async function checkForUpdates(): Promise<ReleaseStatus> {
   return invokeOrFallback("check_for_updates", () => ({
-    currentVersion: "0.2.0",
+    currentVersion: "0.2.1",
     updateAvailable: false,
     checkedAt: new Date().toISOString(),
     message: "浏览器预览模式不会检查更新。",
   }));
+}
+
+export async function restartApp(): Promise<void> {
+  await invokeOrFallback("restart_app", () => undefined);
 }
 
 export async function exportLogs(): Promise<LogExport> {

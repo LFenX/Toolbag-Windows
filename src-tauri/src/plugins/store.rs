@@ -287,6 +287,17 @@ impl PluginStore {
         self.runner.cancel(job_id)
     }
 
+    /// Best-effort shutdown of a persistent sidecar. Returns true if a
+    /// session existed and was torn down; false when no session is open.
+    pub fn shutdown_session(&self, plugin_id: &str) -> bool {
+        self.runner.shutdown_session(plugin_id)
+    }
+
+    /// Push an arbitrary NDJSON frame into a persistent sidecar's stdin.
+    pub fn send_frame(&self, plugin_id: &str, frame: Value) -> AppResult<()> {
+        self.runner.send_frame(plugin_id, frame)
+    }
+
     pub fn signature_status(&self) -> SignatureStatus {
         SignatureStatus {
             enforced: signature::is_enforced(),

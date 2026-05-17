@@ -18,7 +18,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .plugin(optional_updater_plugin())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .target(Target::new(TargetKind::LogDir {
@@ -45,10 +45,13 @@ pub fn run() {
             commands::set_plugin_permissions,
             commands::start_plugin_command,
             commands::cancel_plugin_command,
+            commands::shutdown_plugin_session,
+            commands::send_plugin_frame,
             commands::get_settings,
             commands::save_settings,
             commands::get_release_status,
             commands::check_for_updates,
+            commands::restart_app,
             commands::export_logs,
             commands::open_data_dir,
             commands::clear_registry_cache,
@@ -60,17 +63,4 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Toolbag");
-}
-
-#[cfg(feature = "updater")]
-type UpdaterPlugin<R> = tauri::plugin::TauriPlugin<R, tauri_plugin_updater::Config>;
-
-#[cfg(feature = "updater")]
-fn optional_updater_plugin<R: tauri::Runtime>() -> UpdaterPlugin<R> {
-    tauri_plugin_updater::Builder::new().build()
-}
-
-#[cfg(not(feature = "updater"))]
-fn optional_updater_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
-    tauri::plugin::Builder::new("toolbag-updater-disabled").build()
 }

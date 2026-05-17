@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "../../shared/lib/utils";
 import { useTools } from "../../features/tools/useTools";
+import { useTabsStore } from "./tab-store";
 import { useWorkspaceStore } from "./workspace-store";
 
 interface CommandItem {
@@ -21,6 +22,7 @@ export function CommandPalette() {
   const setOpen = useWorkspaceStore((state) => state.setCommandPaletteOpen);
   const navigate = useNavigate();
   const { data: tools = [] } = useTools();
+  const openTab = useTabsStore((state) => state.openTab);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -73,13 +75,19 @@ export function CommandPalette() {
       hint: tool.description,
       icon: tool.icon,
       keywords: [tool.id, tool.name, tool.category, ...tool.tags],
-      run: () =>
+      run: () => {
+        openTab({
+          toolId: tool.id,
+          toolName: tool.name,
+          iconKey: tool.iconKey,
+        });
         void navigate({
           to: "/tools/$toolId",
           params: { toolId: tool.id },
-        }),
+        });
+      },
     }));
-  }, [navigate, tools]);
+  }, [navigate, openTab, tools]);
 
   const matches = useMemo(() => {
     const all = [...toolCommands, ...baseCommands];
