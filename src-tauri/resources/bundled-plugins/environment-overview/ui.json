@@ -1,0 +1,5 @@
+{
+  "$schema": "https://toolbag.lfen.dev/schemas/ui/1.json",
+  "layout": "builtin",
+  "builtinRenderer": "environment-overview"
+}

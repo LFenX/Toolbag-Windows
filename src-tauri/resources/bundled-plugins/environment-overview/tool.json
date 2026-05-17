@@ -1,0 +1,27 @@
+{
+  "$schema": "https://toolbag.lfen.dev/schemas/plugin/1.json",
+  "id": "com.lfen.toolbag.environment-overview",
+  "name": "环境概览",
+  "version": "1.0.0",
+  "category": "系统",
+  "tags": ["系统", "诊断", "只读"],
+  "description": "查看 Toolbag 当前运行环境、应用信息和 Windows 本机环境信息。",
+  "detailDescription": "展示本机操作系统、CPU、内存、磁盘、网卡、进程、服务、驱动、环境变量和常用只读配置。",
+  "author": { "name": "LFen" },
+  "license": "MIT",
+  "minAppVersion": "0.2.0",
+  "riskLevel": "safe",
+  "requiresElevation": false,
+  "permissionRequirement": "普通权限",
+  "dataAccess": "仅读取本地环境信息",
+  "icon": "monitor-cog",
+  "runtime": { "kind": "builtin" },
+  "builtinRenderer": "environment-overview",
+  "commands": [
+    { "id": "start_scan", "label": "开始扫描" },
+    { "id": "snapshot", "label": "快照（同步）" },
+    { "id": "elevation_status", "label": "权限状态" }
+  ],
+  "ui": "ui.json",
+  "bundled": true
+}

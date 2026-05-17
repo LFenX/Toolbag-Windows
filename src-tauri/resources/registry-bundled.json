@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-17T00:00:00Z",
+  "appVersion": {
+    "stable": "0.2.0",
+    "beta": null
+  },
+  "categories": [
+    { "key": "系统", "label": "系统", "icon": "monitor", "order": 1 },
+    { "key": "网络", "label": "网络", "icon": "globe", "order": 2 },
+    { "key": "开发", "label": "开发", "icon": "code", "order": 3 },
+    { "key": "实用", "label": "实用", "icon": "wrench", "order": 4 },
+    { "key": "媒体", "label": "媒体", "icon": "hard-drive", "order": 5 },
+    { "key": "安全", "label": "安全", "icon": "shield-check", "order": 6 },
+    { "key": "其他", "label": "其他", "icon": "boxes", "order": 7 }
+  ],
+  "plugins": []
+}

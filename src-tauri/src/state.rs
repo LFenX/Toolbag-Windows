@@ -8,13 +8,15 @@ use tauri::{AppHandle, Manager};
 
 use crate::database::Database;
 use crate::errors::AppResult;
+use crate::plugins::PluginStore;
 
 pub struct AppState {
-    database: Database,
+    database: Arc<Database>,
     data_dir: PathBuf,
     log_dir: PathBuf,
     /// Active scan jobs keyed by job_id. Set the AtomicBool to true to cancel.
     scans: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    plugins: PluginStore,
 }
 
 impl AppState {
@@ -25,13 +27,18 @@ impl AppState {
         fs::create_dir_all(&data_dir)?;
         fs::create_dir_all(&log_dir)?;
 
-        let database = Database::open(&data_dir.join("toolbag.sqlite3"))?;
+        let database = Arc::new(Database::open(&data_dir.join("toolbag.sqlite3"))?);
+
+        let plugins_root = data_dir.join("plugins");
+        let staging_root = data_dir.join("staging");
+        let plugins = PluginStore::initialize(plugins_root, staging_root, Arc::clone(&database))?;
 
         Ok(Self {
             database,
             data_dir,
             log_dir,
             scans: Mutex::new(HashMap::new()),
+            plugins,
         })
     }
 
@@ -45,6 +52,10 @@ impl AppState {
 
     pub fn log_dir(&self) -> &Path {
         &self.log_dir
+    }
+
+    pub fn plugins(&self) -> &PluginStore {
+        &self.plugins
     }
 
     /// Register a new scan job and return its cancellation flag.

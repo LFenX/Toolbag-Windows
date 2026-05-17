@@ -50,12 +50,22 @@ jobs:
           TOOLBAG_UPDATER_ENDPOINT: ${{ vars.TOOLBAG_UPDATER_ENDPOINT }}
         run: pnpm prepare:tauri-release
 
+      - name: Verify plugin signing key
+        shell: pwsh
+        env:
+          TOOLBAG_PLUGIN_PUBKEY: ${{ secrets.TOOLBAG_PLUGIN_PUBKEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TOOLBAG_PLUGIN_PUBKEY)) {
+            throw "TOOLBAG_PLUGIN_PUBKEY secret is required so release builds enforce plugin signatures."
+          }
+
       - name: Build and publish Tauri release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TOOLBAG_PLUGIN_PUBKEY: ${{ secrets.TOOLBAG_PLUGIN_PUBKEY }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Toolbag ${{ github.ref_name }}"

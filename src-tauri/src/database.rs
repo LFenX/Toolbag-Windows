@@ -31,7 +31,13 @@ impl Database {
             .optional()?;
 
         match value {
-            Some(value) => Ok(serde_json::from_str(&value)?),
+            Some(value) => {
+                // Best-effort parse: missing fields fall back to defaults.
+                let parsed: serde_json::Value = serde_json::from_str(&value)?;
+                let defaults = serde_json::to_value(AppSettings::default())?;
+                let merged = merge_with_defaults(defaults, parsed);
+                Ok(serde_json::from_value(merged)?)
+            }
             None => {
                 let settings = AppSettings::default();
                 drop(connection);
@@ -55,9 +61,10 @@ impl Database {
         Ok(())
     }
 
-    pub fn record_tool_run(
+    pub fn record_plugin_run(
         &self,
-        tool_id: &str,
+        plugin_id: &str,
+        command_id: &str,
         status: LastResult,
         duration_ms: Option<u128>,
         message: Option<&str>,
@@ -65,29 +72,29 @@ impl Database {
         let duration_ms = duration_ms.map(|value| value.min(i64::MAX as u128) as i64);
         let connection = self.connection()?;
         connection.execute(
-            "INSERT INTO tool_runs (tool_id, status, duration_ms, message)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![tool_id, status.as_str(), duration_ms, message],
+            "INSERT INTO plugin_runs (plugin_id, command_id, status, duration_ms, message)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![plugin_id, command_id, status.as_str(), duration_ms, message],
         )?;
         Ok(())
     }
 
-    pub fn tool_run_summary(&self, tool_id: &str) -> AppResult<ToolRunSummary> {
+    pub fn plugin_run_summary(&self, plugin_id: &str) -> AppResult<ToolRunSummary> {
         let connection = self.connection()?;
         let (run_count, average_duration_ms): (i64, Option<f64>) = connection.query_row(
-            "SELECT COUNT(*), AVG(duration_ms) FROM tool_runs WHERE tool_id = ?1",
-            params![tool_id],
+            "SELECT COUNT(*), AVG(duration_ms) FROM plugin_runs WHERE plugin_id = ?1",
+            params![plugin_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
 
         let last_run: Option<(String, String)> = connection
             .query_row(
                 "SELECT status, created_at
-                 FROM tool_runs
-                 WHERE tool_id = ?1
+                 FROM plugin_runs
+                 WHERE plugin_id = ?1
                  ORDER BY created_at DESC, id DESC
                  LIMIT 1",
-                params![tool_id],
+                params![plugin_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
@@ -102,6 +109,137 @@ impl Database {
             average_duration_ms: average_duration_ms.map(|value| value.round().max(0.0) as u64),
             last_result: LastResult::from_str(&status).unwrap_or(LastResult::Failed),
         })
+    }
+
+    pub fn upsert_installed_plugin(&self, record: &InstalledPluginRow) -> AppResult<()> {
+        let connection = self.connection()?;
+        connection.execute(
+            "INSERT INTO installed_plugins (id, current_version, installed_at, updated_at, source, source_url, bundled, disabled, granted_perms)
+             VALUES (?1, ?2, COALESCE((SELECT installed_at FROM installed_plugins WHERE id = ?1), strftime('%Y-%m-%dT%H:%M:%fZ','now')), strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(id) DO UPDATE SET
+                current_version = excluded.current_version,
+                updated_at = excluded.updated_at,
+                source = excluded.source,
+                source_url = excluded.source_url,
+                bundled = excluded.bundled,
+                disabled = CASE WHEN excluded.bundled = 1 THEN 0 ELSE installed_plugins.disabled END,
+                granted_perms = excluded.granted_perms",
+            params![
+                record.id,
+                record.current_version,
+                record.source,
+                record.source_url,
+                record.bundled as i64,
+                record.disabled as i64,
+                serde_json::to_string(&record.granted_perms)?,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_installed_plugins(&self) -> AppResult<Vec<InstalledPluginRow>> {
+        let connection = self.connection()?;
+        let mut stmt = connection.prepare(
+            "SELECT id, current_version, installed_at, updated_at, source, source_url, bundled, disabled, granted_perms FROM installed_plugins ORDER BY id ASC",
+        )?;
+        let rows = stmt
+            .query_map([], |row| {
+                let granted: String = row.get(8)?;
+                Ok(InstalledPluginRow {
+                    id: row.get(0)?,
+                    current_version: row.get(1)?,
+                    installed_at: row.get(2)?,
+                    updated_at: row.get(3)?,
+                    source: row.get(4)?,
+                    source_url: row.get(5)?,
+                    bundled: row.get::<_, i64>(6)? != 0,
+                    disabled: row.get::<_, i64>(7)? != 0,
+                    granted_perms: serde_json::from_str(&granted).unwrap_or_default(),
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn get_installed_plugin(&self, id: &str) -> AppResult<Option<InstalledPluginRow>> {
+        let connection = self.connection()?;
+        let row = connection
+            .query_row(
+                "SELECT id, current_version, installed_at, updated_at, source, source_url, bundled, disabled, granted_perms
+                 FROM installed_plugins WHERE id = ?1",
+                params![id],
+                |row| {
+                    let granted: String = row.get(8)?;
+                    Ok(InstalledPluginRow {
+                        id: row.get(0)?,
+                        current_version: row.get(1)?,
+                        installed_at: row.get(2)?,
+                        updated_at: row.get(3)?,
+                        source: row.get(4)?,
+                        source_url: row.get(5)?,
+                        bundled: row.get::<_, i64>(6)? != 0,
+                        disabled: row.get::<_, i64>(7)? != 0,
+                        granted_perms: serde_json::from_str(&granted).unwrap_or_default(),
+                    })
+                },
+            )
+            .optional()?;
+        Ok(row)
+    }
+
+    pub fn delete_installed_plugin(&self, id: &str) -> AppResult<()> {
+        let connection = self.connection()?;
+        connection.execute("DELETE FROM installed_plugins WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn set_plugin_disabled(&self, id: &str, disabled: bool) -> AppResult<()> {
+        let connection = self.connection()?;
+        connection.execute(
+            "UPDATE installed_plugins SET disabled = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1",
+            params![id, disabled as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_plugin_perms(&self, id: &str, perms: &[String]) -> AppResult<()> {
+        let connection = self.connection()?;
+        let value = serde_json::to_string(perms)?;
+        connection.execute(
+            "UPDATE installed_plugins SET granted_perms = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1",
+            params![id, value],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_registry_cache(&self, url: &str) -> AppResult<Option<RegistryCacheRow>> {
+        let connection = self.connection()?;
+        let row = connection
+            .query_row(
+                "SELECT url, etag, body, fetched_at FROM registry_cache WHERE url = ?1",
+                params![url],
+                |row| {
+                    Ok(RegistryCacheRow {
+                        url: row.get(0)?,
+                        etag: row.get(1)?,
+                        body: row.get(2)?,
+                        fetched_at: row.get(3)?,
+                    })
+                },
+            )
+            .optional()?;
+        Ok(row)
+    }
+
+    pub fn put_registry_cache(&self, row: &RegistryCacheRow) -> AppResult<()> {
+        let connection = self.connection()?;
+        connection.execute(
+            "INSERT INTO registry_cache (url, etag, body, fetched_at)
+             VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+             ON CONFLICT(url) DO UPDATE SET etag = excluded.etag, body = excluded.body, fetched_at = excluded.fetched_at",
+            params![row.url, row.etag, row.body],
+        )?;
+        Ok(())
     }
 
     fn migrate(&self) -> AppResult<()> {
@@ -142,6 +280,65 @@ impl Database {
             "INSERT OR IGNORE INTO schema_migrations (version) VALUES (2)",
             [],
         )?;
+
+        // v3: plugin system tables.
+        connection.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS installed_plugins (
+                id              TEXT PRIMARY KEY,
+                current_version TEXT NOT NULL,
+                installed_at    TEXT NOT NULL,
+                updated_at      TEXT NOT NULL,
+                source          TEXT NOT NULL DEFAULT 'bundled',
+                source_url      TEXT NOT NULL DEFAULT '',
+                bundled         INTEGER NOT NULL DEFAULT 0,
+                disabled        INTEGER NOT NULL DEFAULT 0,
+                granted_perms   TEXT NOT NULL DEFAULT '[]'
+            );
+
+            CREATE TABLE IF NOT EXISTS plugin_runs (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                plugin_id    TEXT NOT NULL,
+                command_id   TEXT NOT NULL DEFAULT '',
+                status       TEXT NOT NULL,
+                duration_ms  INTEGER,
+                message      TEXT,
+                created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_plugin_runs_plugin_id ON plugin_runs(plugin_id);
+            CREATE INDEX IF NOT EXISTS idx_tool_runs_tool_id ON tool_runs(tool_id);
+
+            CREATE TABLE IF NOT EXISTS registry_cache (
+                url        TEXT PRIMARY KEY,
+                etag       TEXT,
+                body       TEXT NOT NULL,
+                fetched_at TEXT NOT NULL
+            );
+            ",
+        )?;
+
+        // One-shot copy of legacy tool_runs into plugin_runs; we leave the old table for backups
+        // but read from plugin_runs going forward.
+        let already_migrated: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM plugin_runs WHERE command_id = '__legacy__'",
+            [],
+            |row| row.get(0),
+        )?;
+        if already_migrated == 0 {
+            connection.execute(
+                "INSERT INTO plugin_runs (plugin_id, command_id, status, duration_ms, message, created_at)
+                 SELECT
+                    CASE WHEN tool_id = 'environment-overview' THEN 'com.lfen.toolbag.environment-overview' ELSE tool_id END,
+                    '__legacy__', status, duration_ms, message, created_at
+                 FROM tool_runs",
+                [],
+            )?;
+        }
+
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version) VALUES (3)",
+            [],
+        )?;
         Ok(())
     }
 
@@ -168,15 +365,62 @@ impl Database {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct InstalledPluginRow {
+    pub id: String,
+    pub current_version: String,
+    #[allow(dead_code)]
+    pub installed_at: String,
+    #[allow(dead_code)]
+    pub updated_at: String,
+    pub source: String,
+    pub source_url: String,
+    pub bundled: bool,
+    pub disabled: bool,
+    pub granted_perms: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RegistryCacheRow {
+    pub url: String,
+    pub etag: Option<String>,
+    pub body: String,
+    #[allow(dead_code)]
+    pub fetched_at: String,
+}
+
+fn merge_with_defaults(
+    defaults: serde_json::Value,
+    actual: serde_json::Value,
+) -> serde_json::Value {
+    match (defaults, actual) {
+        (serde_json::Value::Object(mut d), serde_json::Value::Object(a)) => {
+            for (k, v) in a {
+                let next = match d.remove(&k) {
+                    Some(existing) => merge_with_defaults(existing, v),
+                    None => v,
+                };
+                d.insert(k, next);
+            }
+            serde_json::Value::Object(d)
+        }
+        (_, actual) => actual,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn creates_schema_and_default_settings() {
+    fn open_temp() -> (Database, tempfile::TempDir) {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let database = Database::open(&temp_dir.path().join("toolbag.sqlite3")).expect("database");
+        (database, temp_dir)
+    }
 
+    #[test]
+    fn creates_schema_and_default_settings() {
+        let (database, _t) = open_temp();
         let settings = database.get_settings().expect("settings");
 
         assert_eq!(settings, AppSettings::default());
@@ -184,24 +428,20 @@ mod tests {
 
     #[test]
     fn persists_settings() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let database = Database::open(&temp_dir.path().join("toolbag.sqlite3")).expect("database");
+        let (database, _t) = open_temp();
         let settings = AppSettings {
-            favorite_tool_ids: vec!["environment-overview".to_string()],
-            auto_check_updates: false,
-            launch_at_startup: true,
-            telemetry_enabled: false,
+            favorite_tool_ids: vec!["com.lfen.toolbag.environment-overview".to_string()],
+            app_auto_update: false,
+            ..AppSettings::default()
         };
 
-        database.save_settings(&settings).expect("save settings");
-
+        database.save_settings(&settings).expect("save");
         assert_eq!(database.get_settings().expect("settings"), settings);
     }
 
     #[test]
     fn reads_legacy_settings_with_missing_fields() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let database = Database::open(&temp_dir.path().join("toolbag.sqlite3")).expect("database");
+        let (database, _t) = open_temp();
         {
             let connection = database.connection().expect("connection");
             connection
@@ -214,23 +454,32 @@ mod tests {
                 .expect("legacy settings");
         }
 
+        let s = database.get_settings().expect("settings");
         assert_eq!(
-            database.get_settings().expect("settings"),
-            AppSettings::default()
+            s.favorite_tool_ids,
+            vec!["environment-overview".to_string()]
         );
+        // Missing fields fall back to defaults.
+        assert_eq!(s.theme, AppSettings::default().theme);
     }
 
     #[test]
-    fn records_tool_runs_and_builds_summary() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let database = Database::open(&temp_dir.path().join("toolbag.sqlite3")).expect("database");
+    fn records_plugin_runs_and_builds_summary() {
+        let (database, _t) = open_temp();
 
         database
-            .record_tool_run("environment-overview", LastResult::Success, Some(100), None)
+            .record_plugin_run(
+                "com.lfen.toolbag.environment-overview",
+                "scan",
+                LastResult::Success,
+                Some(100),
+                None,
+            )
             .expect("first run");
         database
-            .record_tool_run(
-                "environment-overview",
+            .record_plugin_run(
+                "com.lfen.toolbag.environment-overview",
+                "scan",
                 LastResult::Cancelled,
                 Some(300),
                 Some("stop"),
@@ -238,12 +487,32 @@ mod tests {
             .expect("second run");
 
         let summary = database
-            .tool_run_summary("environment-overview")
+            .plugin_run_summary("com.lfen.toolbag.environment-overview")
             .expect("summary");
 
         assert_eq!(summary.run_count, 2);
         assert_eq!(summary.average_duration_ms, Some(200));
         assert_eq!(summary.last_result, LastResult::Cancelled);
         assert!(summary.last_run_at.is_some());
+    }
+
+    #[test]
+    fn upserts_installed_plugins() {
+        let (database, _t) = open_temp();
+        let row = InstalledPluginRow {
+            id: "com.lfen.toolbag.environment-overview".to_string(),
+            current_version: "1.0.0".to_string(),
+            installed_at: String::new(),
+            updated_at: String::new(),
+            source: "bundled".to_string(),
+            source_url: String::new(),
+            bundled: true,
+            disabled: false,
+            granted_perms: vec![],
+        };
+        database.upsert_installed_plugin(&row).expect("insert");
+        let installed = database.list_installed_plugins().expect("list");
+        assert_eq!(installed.len(), 1);
+        assert!(installed[0].bundled);
     }
 }
