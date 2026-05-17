@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft, Pause } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { getPluginUiSchema } from "../../shared/tauri/plugins";
-import type { PluginUiSchema } from "../../shared/tauri/types";
+import type { PluginUiSchema, UiField } from "../../shared/tauri/types";
 import { Badge } from "../../shared/ui/badge";
 import { Button } from "../../shared/ui/button";
 import { ToolErrorBoundary } from "./ErrorBoundary";
@@ -80,7 +80,12 @@ function SchemaToolView({
   ui: PluginUiSchema;
 }) {
   const { state, start, cancel, reset } = usePluginJob(pluginId);
-  const [formState, setFormState] = useState<Record<string, unknown>>({});
+  const defaultFormState = useMemo(
+    () => buildDefaultFormState(ui.schema),
+    [ui.schema],
+  );
+  const [formState, setFormState] =
+    useState<Record<string, unknown>>(defaultFormState);
   const [busyAction, setBusyAction] = useState<string | null>(null);
 
   const handleAction = async (actionId: string, command?: string) => {
@@ -98,7 +103,7 @@ function SchemaToolView({
     }
     if (action.kind === "reset") {
       reset();
-      setFormState({});
+      setFormState(defaultFormState);
       return;
     }
     if (action.kind === "copy" && action.source) {
@@ -193,6 +198,30 @@ function collectSections(schema: PluginUiSchema["schema"]) {
   return [];
 }
 
+function buildDefaultFormState(schema: PluginUiSchema["schema"]) {
+  const defaults: Record<string, unknown> = {};
+  for (const section of collectSections(schema)) {
+    if (!("fields" in section)) continue;
+    for (const field of section.fields) {
+      const value = getFieldDefault(field);
+      if (value !== undefined) {
+        defaults[field.key] = value;
+      }
+    }
+  }
+  return defaults;
+}
+
+function getFieldDefault(field: UiField) {
+  if (field.type === "hidden") {
+    return field.value;
+  }
+  if ("default" in field) {
+    return field.default;
+  }
+  return undefined;
+}
+
 function lookupCopySource(source: string, result: unknown) {
   if (source === "$result") return result;
   if (!result || typeof result !== "object") return undefined;
@@ -279,4 +308,3 @@ function MissingSchema({ id }: { id: string }) {
     </section>
   );
 }
-
