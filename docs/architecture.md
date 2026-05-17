@@ -96,7 +96,7 @@ Rust 在应用数据目录创建 `toolbag.sqlite3`：
 应用本体和插件走两条独立通道：
 
 - **应用本体**：`tauri-plugin-updater` + GitHub Release `latest.json`。
-- **插件**：拉 `https://toolbag.lfen.dev/index.json`（或用户配置的 Registry URL），按 `latestVersion` 跟已装版本对比，弹徽章提示。
+- **插件**：拉 `https://lfenx.github.io/Toolbag-Registry/index.json`（或用户配置的 Registry URL），按 `latestVersion` 跟已装版本对比，弹徽章提示。
 
 两者都依赖同一把 minisign 主密钥（公钥硬编码进应用）。
 

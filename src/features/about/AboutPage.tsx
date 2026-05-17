@@ -120,8 +120,8 @@ export function AboutPage() {
         </PanelHeader>
         <PanelBody className="grid gap-2 text-sm sm:grid-cols-2">
           <ExternalLink icon={GitBranch} label="GitHub 源码" url="https://github.com/LFenX/Toolbag-Windows" />
-          <ExternalLink icon={Globe2} label="注册中心" url="https://toolbag.lfen.dev" />
-          <ExternalLink icon={Code2} label="插件开发文档" url="https://toolbag.lfen.dev/docs/plugin-development" />
+          <ExternalLink icon={Globe2} label="注册中心" url="https://lfenx.github.io/Toolbag-Registry/index.json" />
+          <ExternalLink icon={Code2} label="插件开发文档" url="https://github.com/LFenX/Toolbag-Windows/blob/main/docs/adding-tool.md" />
         </PanelBody>
       </Panel>
     </div>

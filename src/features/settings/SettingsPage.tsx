@@ -473,7 +473,7 @@ function PluginsSection({
     >
       <SettingRow
         label="注册中心 URL"
-        description="默认为 https://toolbag.lfen.dev/index.json。企业可改私有源。"
+        description="默认为 https://lfenx.github.io/Toolbag-Registry/index.json。企业可改私有源。"
         control={
           <Input
             className="w-72 max-w-full"
@@ -753,4 +753,3 @@ function AccentPicker({
     </div>
   );
 }
-

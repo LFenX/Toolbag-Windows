@@ -10,9 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::database::{Database, RegistryCacheRow};
 use crate::errors::{AppError, AppResult, ErrorCode};
 
-pub const DEFAULT_REGISTRY_URL: &str = "https://toolbag.lfen.dev/index.json";
-pub const FALLBACK_REGISTRY_URL: &str =
-    "https://cdn.jsdelivr.net/gh/LFenX/toolbag-registry@gh-pages/index.json";
+pub const DEFAULT_REGISTRY_URL: &str = "https://lfenx.github.io/Toolbag-Registry/index.json";
+pub const FALLBACK_REGISTRY_URL: &str = "https://lfenx.github.io/Toolbag-Registry/index.json";
 
 /// Hard-coded fallback so the marketplace is never empty even with no network.
 const BUNDLED_INDEX: &str = include_str!("../../resources/registry-bundled.json");
