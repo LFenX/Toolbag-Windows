@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.*
+!.env.example
+src-tauri/target
+src-tauri/gen
+src-tauri/.cargo
+src-tauri/tauri.release.conf.json
+*.log
+coverage
+.vite
+.DS_Store
+Thumbs.db
