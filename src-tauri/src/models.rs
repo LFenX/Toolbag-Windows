@@ -9,67 +9,8 @@ pub struct AppInfo {
     pub build_profile: String,
     pub data_dir: String,
     pub log_dir: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StaticToolManifest {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub category: String,
-    pub version: String,
-    pub route_path: String,
-    pub tags: Vec<String>,
-    pub risk_level: RiskLevel,
-    pub requires_elevation: bool,
-    pub permission_requirement: String,
-    pub data_access: String,
-    pub detail_description: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ToolManifest {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub category: String,
-    pub version: String,
-    pub route_path: String,
-    pub tags: Vec<String>,
-    pub risk_level: RiskLevel,
-    pub requires_elevation: bool,
-    pub permission_requirement: String,
-    pub data_access: String,
-    pub detail_description: String,
-    pub last_run_at: Option<String>,
-    pub run_count: u32,
-    pub average_duration_ms: Option<u64>,
-    pub last_result: LastResult,
-}
-
-impl ToolManifest {
-    pub fn from_metadata(metadata: StaticToolManifest, summary: ToolRunSummary) -> Self {
-        Self {
-            id: metadata.id,
-            name: metadata.name,
-            description: metadata.description,
-            category: metadata.category,
-            version: metadata.version,
-            route_path: metadata.route_path,
-            tags: metadata.tags,
-            risk_level: metadata.risk_level,
-            requires_elevation: metadata.requires_elevation,
-            permission_requirement: metadata.permission_requirement,
-            data_access: metadata.data_access,
-            detail_description: metadata.detail_description,
-            last_run_at: summary.last_run_at,
-            run_count: summary.run_count,
-            average_duration_ms: summary.average_duration_ms,
-            last_result: summary.last_result,
-        }
-    }
+    pub plugins_dir: String,
+    pub trusted_pubkey_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -129,25 +70,121 @@ impl Default for ToolRunSummary {
     }
 }
 
+/// Categorical key for the sidebar; localized labels live in the registry.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
 pub struct AppSettings {
     pub favorite_tool_ids: Vec<String>,
-    pub auto_check_updates: bool,
+    pub app_auto_update: bool,
+    pub plugin_auto_update: bool,
+    pub update_check_frequency: UpdateFrequency,
+    pub update_channel: UpdateChannel,
     pub launch_at_startup: bool,
     pub telemetry_enabled: bool,
+    pub theme: ThemePref,
+    pub accent: AccentColor,
+    pub density: Density,
+    pub motion: MotionPref,
+    pub language: String,
+    pub startup_page: StartupPage,
+    pub recent_list_size: u8,
+    pub log_retention_days: LogRetention,
+    pub registry_url: Option<String>,
+    pub allow_unsigned: bool,
+    pub max_concurrent_downloads: u8,
+    pub http_proxy: Option<String>,
+    pub font_scale: u8,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            favorite_tool_ids: vec!["environment-overview".to_string()],
-            auto_check_updates: true,
+            favorite_tool_ids: vec!["com.lfen.toolbag.environment-overview".to_string()],
+            app_auto_update: true,
+            plugin_auto_update: true,
+            update_check_frequency: UpdateFrequency::OnStart,
+            update_channel: UpdateChannel::Stable,
             launch_at_startup: false,
             telemetry_enabled: false,
+            theme: ThemePref::System,
+            accent: AccentColor::Indigo,
+            density: Density::Comfortable,
+            motion: MotionPref::System,
+            language: "zh-CN".to_string(),
+            startup_page: StartupPage::Workbench,
+            recent_list_size: 10,
+            log_retention_days: LogRetention::Days { value: 30 },
+            registry_url: None,
+            allow_unsigned: false,
+            max_concurrent_downloads: 2,
+            http_proxy: None,
+            font_scale: 100,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum UpdateFrequency {
+    OnStart,
+    Daily,
+    Weekly,
+    Manual,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum UpdateChannel {
+    Stable,
+    Beta,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ThemePref {
+    Light,
+    Dark,
+    System,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum AccentColor {
+    Indigo,
+    Emerald,
+    Rose,
+    Amber,
+    Custom(String),
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Density {
+    Compact,
+    Comfortable,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum MotionPref {
+    On,
+    Off,
+    System,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum StartupPage {
+    Workbench,
+    LastTool,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LogRetention {
+    Days { value: u16 },
+    Forever,
 }
 
 #[derive(Debug, Clone, Serialize)]

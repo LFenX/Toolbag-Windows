@@ -4,8 +4,8 @@ mod elevation;
 mod environment;
 mod errors;
 mod models;
+mod plugins;
 mod state;
-mod tools;
 mod updates;
 
 use tauri::Manager;
@@ -35,16 +35,26 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
             commands::list_tools,
+            commands::get_plugin_ui_schema,
+            commands::get_signature_status,
+            commands::list_registry_plugins,
+            commands::import_plugin_from_file,
+            commands::install_plugin_from_registry,
+            commands::uninstall_plugin,
+            commands::toggle_plugin,
+            commands::set_plugin_permissions,
+            commands::start_plugin_command,
+            commands::cancel_plugin_command,
             commands::get_settings,
             commands::save_settings,
             commands::get_release_status,
             commands::check_for_updates,
             commands::export_logs,
+            commands::open_data_dir,
+            commands::clear_registry_cache,
             commands::get_environment_snapshot,
-            // Streaming scan
             commands::start_environment_scan,
             commands::cancel_environment_scan,
-            // Elevation
             commands::get_is_elevated,
             commands::relaunch_as_admin,
         ])

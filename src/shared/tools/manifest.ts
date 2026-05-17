@@ -1,12 +1,13 @@
 import { z } from "zod";
 
 import rawToolMetadata from "./manifest.json";
-import type { ToolManifest, ToolManifestMetadata } from "../tauri/types";
+import type { ToolManifest } from "../tauri/types";
 
 export const riskLevelSchema = z.enum(["safe", "caution", "elevated"]);
 export const lastResultSchema = z.enum(["success", "failed", "cancelled", "never"]);
+export const runtimeKindSchema = z.enum(["none", "builtin", "sidecar"]);
 
-export const toolManifestMetadataSchema = z.object({
+export const toolManifestSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().min(1),
@@ -19,25 +20,22 @@ export const toolManifestMetadataSchema = z.object({
   permissionRequirement: z.string().min(1),
   dataAccess: z.string().min(1),
   detailDescription: z.string().min(1),
-}) satisfies z.ZodType<ToolManifestMetadata>;
-
-export const toolManifestSchema = toolManifestMetadataSchema.extend({
-  lastRunAt: z.string().nullable(),
-  runCount: z.number().int().nonnegative(),
-  averageDurationMs: z.number().int().nonnegative().nullable(),
-  lastResult: lastResultSchema,
+  runtimeKind: runtimeKindSchema.default("builtin"),
+  builtinRenderer: z.string().nullable().default(null),
+  bundled: z.boolean().default(false),
+  installed: z.boolean().default(true),
+  disabled: z.boolean().default(false),
+  grantedPerms: z.array(z.string()).default([]),
+  minAppVersion: z.string().nullable().default(null),
+  lastRunAt: z.string().nullable().default(null),
+  runCount: z.number().int().nonnegative().default(0),
+  averageDurationMs: z.number().int().nonnegative().nullable().default(null),
+  lastResult: lastResultSchema.default("never"),
+  icon: z.string().nullable().default(null),
+  uiSchemaPath: z.string().nullable().default(null),
+  permissionsRequired: z.array(z.string()).default([]),
 }) satisfies z.ZodType<ToolManifest>;
 
 export const toolManifestListSchema = z.array(toolManifestSchema);
 
-export const toolManifestMetadata = z
-  .array(toolManifestMetadataSchema)
-  .parse(rawToolMetadata);
-
-export const fallbackTools: ToolManifest[] = toolManifestMetadata.map((tool) => ({
-  ...tool,
-  lastRunAt: null,
-  runCount: 0,
-  averageDurationMs: null,
-  lastResult: "never",
-}));
+export const fallbackTools: ToolManifest[] = toolManifestListSchema.parse(rawToolMetadata);

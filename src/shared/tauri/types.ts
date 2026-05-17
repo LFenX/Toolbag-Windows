@@ -1,5 +1,20 @@
 export type RiskLevel = "safe" | "caution" | "elevated";
 export type LastResult = "success" | "failed" | "cancelled" | "never";
+export type RuntimeKind = "none" | "builtin" | "sidecar";
+
+export type ThemePref = "light" | "dark" | "system";
+export type AccentColor =
+  | "indigo"
+  | "emerald"
+  | "rose"
+  | "amber"
+  | { custom: string };
+export type Density = "compact" | "comfortable";
+export type MotionPref = "on" | "off" | "system";
+export type StartupPage = "workbench" | "lastTool";
+export type UpdateFrequency = "onStart" | "daily" | "weekly" | "manual";
+export type UpdateChannel = "stable" | "beta";
+export type LogRetention = { kind: "days"; value: number } | { kind: "forever" };
 
 export interface ToolManifestMetadata {
   id: string;
@@ -17,10 +32,20 @@ export interface ToolManifestMetadata {
 }
 
 export interface ToolManifest extends ToolManifestMetadata {
+  runtimeKind: RuntimeKind;
+  builtinRenderer: string | null;
+  bundled: boolean;
+  installed: boolean;
+  disabled: boolean;
+  grantedPerms: string[];
+  minAppVersion: string | null;
   lastRunAt: string | null;
   runCount: number;
   averageDurationMs: number | null;
   lastResult: LastResult;
+  icon: string | null;
+  uiSchemaPath: string | null;
+  permissionsRequired: string[];
 }
 
 export interface AppInfo {
@@ -30,13 +55,31 @@ export interface AppInfo {
   buildProfile: string;
   dataDir: string;
   logDir: string;
+  pluginsDir: string;
+  trustedPubkeyFingerprint: string | null;
 }
 
 export interface AppSettings {
   favoriteToolIds: string[];
-  autoCheckUpdates: boolean;
+  appAutoUpdate: boolean;
+  pluginAutoUpdate: boolean;
+  updateCheckFrequency: UpdateFrequency;
+  updateChannel: UpdateChannel;
   launchAtStartup: boolean;
   telemetryEnabled: boolean;
+  theme: ThemePref;
+  accent: AccentColor;
+  density: Density;
+  motion: MotionPref;
+  language: string;
+  startupPage: StartupPage;
+  recentListSize: number;
+  logRetentionDays: LogRetention;
+  registryUrl: string | null;
+  allowUnsigned: boolean;
+  maxConcurrentDownloads: number;
+  httpProxy: string | null;
+  fontScale: number;
 }
 
 export interface ReleaseStatus {
@@ -52,7 +95,221 @@ export interface LogExport {
   bytes: number;
 }
 
-export type EnvironmentItemStatus = "ok" | "info" | "warning" | "error" | "empty";
+// ── Plugin / registry types ──────────────────────────────────────────────────
+
+export interface PluginUiSchema {
+  pluginId: string;
+  version: string;
+  schema: UiSchema;
+  bundled: boolean;
+}
+
+export interface RegistryIndex {
+  schemaVersion: number;
+  generatedAt: string;
+  appVersion: { stable?: string | null; beta?: string | null };
+  categories: { key: string; label: string; icon?: string; order: number }[];
+  plugins: RegistryEntry[];
+  source: "bundled" | "cached" | "live";
+}
+
+export interface RegistryEntry {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  latestVersion: string;
+  minAppVersion?: string | null;
+  riskLevel?: string | null;
+  downloadUrl: string;
+  signatureUrl?: string | null;
+  sha256?: string | null;
+  iconUrl?: string | null;
+  publishedAt: string;
+  size?: number | null;
+  changelog?: string | null;
+  author?: string | null;
+}
+
+export interface SignatureStatus {
+  enforced: boolean;
+  fingerprint: string | null;
+}
+
+export interface InstallResult {
+  pluginId: string;
+  version: string;
+}
+
+// ── UI schema (declarative) ──────────────────────────────────────────────────
+
+export type UiSchema =
+  | BuiltinUiSchema
+  | SplitUiSchema
+  | StackUiSchema
+  | SingleUiSchema;
+
+export interface BuiltinUiSchema {
+  layout: "builtin";
+  builtinRenderer: string;
+}
+
+export interface SplitUiSchema {
+  layout: "split";
+  header?: UiHeader;
+  left: UiSection;
+  right: UiResultSection;
+}
+
+export interface StackUiSchema {
+  layout: "stack";
+  header?: UiHeader;
+  sections: (UiSection | UiResultSection)[];
+}
+
+export interface SingleUiSchema {
+  layout: "single";
+  header?: UiHeader;
+  right: UiResultSection;
+}
+
+export interface UiHeader {
+  showVersion?: boolean;
+  showRisk?: boolean;
+  showLastRun?: boolean;
+}
+
+export interface UiSection {
+  kind?: "form";
+  title?: string;
+  description?: string;
+  fields: UiField[];
+  actions?: UiAction[];
+}
+
+export interface UiResultSection {
+  kind: "result";
+  title?: string;
+  renderers: UiResultRenderer[];
+}
+
+export type UiField =
+  | UiTextField
+  | UiTextareaField
+  | UiNumberField
+  | UiSwitchField
+  | UiSelectField
+  | UiMultiSelectField
+  | UiRadioGroupField
+  | UiTabsField
+  | UiFilePickerField
+  | UiFolderPickerField
+  | UiTagInputField
+  | UiHiddenField;
+
+interface FieldBase {
+  key: string;
+  label?: string;
+  help?: string;
+  required?: boolean;
+  visibleWhen?: string;
+  disabledWhen?: string;
+}
+
+export interface UiTextField extends FieldBase {
+  type: "text";
+  placeholder?: string;
+  pattern?: string;
+  maxLength?: number;
+  default?: string;
+}
+export interface UiTextareaField extends FieldBase {
+  type: "textarea";
+  rows?: number;
+  monospace?: boolean;
+  default?: string;
+}
+export interface UiNumberField extends FieldBase {
+  type: "number";
+  min?: number;
+  max?: number;
+  step?: number;
+  default?: number;
+}
+export interface UiSwitchField extends FieldBase {
+  type: "switch";
+  default?: boolean;
+}
+export interface UiSelectField extends FieldBase {
+  type: "select";
+  options: { value: string; label?: string }[];
+  default?: string;
+}
+export interface UiMultiSelectField extends FieldBase {
+  type: "multiSelect";
+  options: { value: string; label?: string }[];
+  max?: number;
+  default?: string[];
+}
+export interface UiRadioGroupField extends FieldBase {
+  type: "radioGroup";
+  options: { value: string; label?: string }[];
+  default?: string;
+}
+export interface UiTabsField extends FieldBase {
+  type: "tabs";
+  options: { value: string; label?: string }[];
+  default?: string;
+}
+export interface UiFilePickerField extends FieldBase {
+  type: "filePicker";
+  filters?: { name: string; extensions: string[] }[];
+  multiple?: boolean;
+  default?: string;
+}
+export interface UiFolderPickerField extends FieldBase {
+  type: "folderPicker";
+  default?: string;
+}
+export interface UiTagInputField extends FieldBase {
+  type: "tagInput";
+  suggestions?: string[];
+  default?: string[];
+}
+export interface UiHiddenField extends FieldBase {
+  type: "hidden";
+  value: unknown;
+}
+
+export interface UiAction {
+  id: string;
+  label: string;
+  primary?: boolean;
+  kind?: "command" | "cancel" | "reset" | "openUrl" | "copy";
+  command?: string;
+  url?: string;
+  source?: string;
+}
+
+export type UiResultRenderer =
+  | { type: "text"; source?: string }
+  | { type: "code"; source?: string; language?: string; wrap?: boolean }
+  | { type: "keyValue"; source?: string }
+  | { type: "table"; source?: string; columns?: { key: string; label: string }[] }
+  | { type: "list"; source?: string }
+  | { type: "log"; source?: string; level?: "info" | "warn" | "error" | "debug" }
+  | { type: "progress"; showWhen?: string }
+  | { type: "status" };
+
+// ── Streaming scan event payloads (legacy environment-overview path) ─────────
+
+export type EnvironmentItemStatus =
+  | "ok"
+  | "info"
+  | "warning"
+  | "error"
+  | "empty";
 
 export interface EnvironmentSummaryMetric {
   id: string;
@@ -111,8 +368,6 @@ export interface EnvironmentSnapshot {
   warnings: string[];
 }
 
-// ── Streaming scan event payloads ─────────────────────────────────────────────
-
 export type ScanGroupStatus = "pending" | "running" | "done" | "failed";
 
 export interface ScanJobStartedPayload {
@@ -151,10 +406,26 @@ export interface ScanJobCancelledPayload {
 }
 
 export const defaultSettings: AppSettings = {
-  favoriteToolIds: ["environment-overview"],
-  autoCheckUpdates: true,
+  favoriteToolIds: ["com.lfen.toolbag.environment-overview"],
+  appAutoUpdate: true,
+  pluginAutoUpdate: true,
+  updateCheckFrequency: "onStart",
+  updateChannel: "stable",
   launchAtStartup: false,
   telemetryEnabled: false,
+  theme: "system",
+  accent: "indigo",
+  density: "comfortable",
+  motion: "system",
+  language: "zh-CN",
+  startupPage: "workbench",
+  recentListSize: 10,
+  logRetentionDays: { kind: "days", value: 30 },
+  registryUrl: null,
+  allowUnsigned: false,
+  maxConcurrentDownloads: 2,
+  httpProxy: null,
+  fontScale: 100,
 };
 
 export { fallbackTools } from "../tools/manifest";

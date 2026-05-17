@@ -1,11 +1,11 @@
 [package]
 name = "toolbag"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Windows-first local toolkit workbench."
 authors = ["LFen"]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/LFenX/Toolbag-Windows"
+repository = "https://github.com/LFenX/toolbag-windows"
 
 [features]
 default = []
@@ -31,6 +31,12 @@ tauri-plugin-window-state = "2"
 thiserror = "2"
 time = { version = "0.3", features = ["formatting"] }
 uuid = { version = "1", features = ["v4"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
+hex = "0.4"
+minisign-verify = "0.2"
+semver = "1"
+ureq = { version = "2", default-features = false, features = ["tls", "json", "gzip"] }
 
 [dev-dependencies]
 tempfile = "3"

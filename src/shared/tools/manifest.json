@@ -1,16 +1,26 @@
 [
   {
-    "id": "environment-overview",
+    "id": "com.lfen.toolbag.environment-overview",
     "name": "环境概览",
     "description": "查看 Toolbag 当前运行环境、应用信息和 Windows 本机环境信息。",
     "category": "系统",
     "version": "1.0.0",
-    "routePath": "/tools/environment-overview",
+    "routePath": "/tools/com.lfen.toolbag.environment-overview",
     "tags": ["系统", "诊断", "只读"],
     "riskLevel": "safe",
     "requiresElevation": false,
     "permissionRequirement": "普通权限",
     "dataAccess": "仅读取本地环境信息",
-    "detailDescription": "展示本机操作系统、CPU、内存、磁盘、网卡、进程、服务、驱动、环境变量和常用只读配置。"
+    "detailDescription": "展示本机操作系统、CPU、内存、磁盘、网卡、进程、服务、驱动、环境变量和常用只读配置。",
+    "runtimeKind": "builtin",
+    "builtinRenderer": "environment-overview",
+    "bundled": true,
+    "installed": true,
+    "disabled": false,
+    "grantedPerms": [],
+    "minAppVersion": "0.2.0",
+    "icon": "monitor-cog",
+    "uiSchemaPath": null,
+    "permissionsRequired": []
   }
 ]

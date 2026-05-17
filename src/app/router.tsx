@@ -10,14 +10,20 @@ import { AppShell } from "./shell/AppShell";
 import { AboutPage } from "../features/about/AboutPage";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { LogsPage } from "../features/logs/LogsPage";
+import { MarketplacePage } from "../features/marketplace/MarketplacePage";
+import { PluginsPage } from "../features/plugins/PluginsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { ToolPage } from "../features/tools/ToolPage";
+import { ThemeController } from "./theme";
 
 const rootRoute = createRootRoute({
   component: () => (
-    <AppShell>
-      <Outlet />
-    </AppShell>
+    <>
+      <ThemeController />
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    </>
   ),
 });
 
@@ -31,6 +37,18 @@ const toolRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tools/$toolId",
   component: ToolPage,
+});
+
+const marketplaceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/marketplace",
+  component: MarketplacePage,
+});
+
+const pluginsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/plugins",
+  component: PluginsPage,
 });
 
 const settingsRoute = createRoute({
@@ -54,6 +72,8 @@ const aboutRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   toolRoute,
+  marketplaceRoute,
+  pluginsRoute,
   settingsRoute,
   logsRoute,
   aboutRoute,
