@@ -63,7 +63,10 @@ pub fn run() {
 }
 
 #[cfg(feature = "updater")]
-fn optional_updater_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+type UpdaterPlugin<R> = tauri::plugin::TauriPlugin<R, tauri_plugin_updater::Config>;
+
+#[cfg(feature = "updater")]
+fn optional_updater_plugin<R: tauri::Runtime>() -> UpdaterPlugin<R> {
     tauri_plugin_updater::Builder::new().build()
 }
 
