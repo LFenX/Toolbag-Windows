@@ -162,8 +162,14 @@ fn download_file(url: &str, target: &std::path::Path, proxy: Option<&str>) -> Ap
 }
 
 #[tauri::command]
-pub fn uninstall_plugin(plugin_id: String, state: State<'_, AppState>) -> AppResult<()> {
-    state.plugins().uninstall(&plugin_id)
+pub fn uninstall_plugin(
+    plugin_id: String,
+    delete_data: Option<bool>,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    state
+        .plugins()
+        .uninstall(&plugin_id, delete_data.unwrap_or(false))
 }
 
 #[tauri::command]

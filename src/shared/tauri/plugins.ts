@@ -21,7 +21,7 @@ export async function listRegistryPlugins(
     return {
       schemaVersion: 1,
       generatedAt: new Date().toISOString(),
-      appVersion: { stable: "0.2.1" },
+      appVersion: { stable: "0.3.0" },
       categories: [],
       plugins: [],
       source: "bundled",
@@ -55,8 +55,11 @@ export async function installPluginFromRegistry(
   return call<InstallResult>("install_plugin_from_registry", { pluginId });
 }
 
-export async function uninstallPlugin(pluginId: string): Promise<void> {
-  await call<null>("uninstall_plugin", { pluginId });
+export async function uninstallPlugin(
+  pluginId: string,
+  deleteData = false,
+): Promise<void> {
+  await call<null>("uninstall_plugin", { pluginId, deleteData });
 }
 
 export async function togglePlugin(

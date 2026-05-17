@@ -177,3 +177,15 @@ toolbag-plugin-<id>-<version>.tbpkg.sha256   # 完整性双保险
    - 前端：`registry.test.ts` 验证 builtin key 被映射到组件。
 
 强烈建议新工具用插件形态而不是 builtin —— 它给用户更好的"无需升级应用即可获得新工具"体验，也避免框架膨胀。
+## 内置 UI + sidecar（官方特例）
+
+从 Toolbag 0.3.0 起，`PowerShell 多会话管理器` 是一个明确的官方特例：React UI 编译在主程序中，sidecar 仍通过插件包分发。这样做是因为完整终端仿真需要 `xterm.js`、Tab 关闭保护、全局快捷键避让和持久 sidecar 事件通道，当前声明式 UI schema 还不能承载这些交互。
+
+这类工具必须同时满足：
+
+- `tool.json` 使用 `runtime.kind = "sidecar"` 和 `runtime.lifecycle = "persistent"`。
+- `tool.json` 与 `ui.json` 的 `builtinRenderer` 指向主程序已注册的 renderer。
+- `minAppVersion` 必须不低于首次支持该 renderer 的主程序版本。
+- 插件运行期数据写入 `plugins\<id>\data\`，不要写入版本目录。
+
+普通第三方插件仍应优先使用声明式 `ui.json`。新增内置 UI 特例需要同步修改主程序和插件发布节奏。

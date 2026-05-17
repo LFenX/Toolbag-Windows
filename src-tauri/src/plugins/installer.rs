@@ -113,7 +113,7 @@ impl<'a> Installer<'a> {
         Ok(manifest)
     }
 
-    pub fn uninstall(&self, id: &str) -> AppResult<()> {
+    pub fn uninstall(&self, id: &str, delete_data: bool) -> AppResult<()> {
         let row = self
             .database
             .get_installed_plugin(id)?
@@ -126,7 +126,11 @@ impl<'a> Installer<'a> {
         }
         let plugin_dir = self.plugins_root.join(id);
         if plugin_dir.exists() {
-            fs::remove_dir_all(&plugin_dir)?;
+            if delete_data {
+                fs::remove_dir_all(&plugin_dir)?;
+            } else {
+                remove_plugin_install_files_but_keep_data(&plugin_dir)?;
+            }
         }
         self.database.delete_installed_plugin(id)?;
         Ok(())
@@ -144,6 +148,22 @@ impl<'a> Installer<'a> {
         }
         Ok(Some(self.plugins_root.join(id).join(version)))
     }
+}
+
+fn remove_plugin_install_files_but_keep_data(plugin_dir: &Path) -> AppResult<()> {
+    for entry in fs::read_dir(plugin_dir)? {
+        let entry = entry?;
+        if entry.file_name().to_string_lossy() == "data" {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            fs::remove_dir_all(path)?;
+        } else {
+            fs::remove_file(path)?;
+        }
+    }
+    Ok(())
 }
 
 fn sha256_hex(path: &Path) -> AppResult<String> {

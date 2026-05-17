@@ -5,19 +5,32 @@ import {
   HardDrive,
   MonitorCog,
   ShieldCheck,
+  TerminalSquare,
   Wrench,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { lazy } from "react";
 
 import { EnvironmentOverviewTool } from "./environment-overview/EnvironmentOverviewTool";
 import type { ToolManifest } from "../../shared/tauri/types";
 import type { BuiltinRegistration, ToolDefinition } from "./types";
+
+const PowerShellSessionManagerTool = lazy(() =>
+  import("./powershell-session-manager/PowerShellSessionManagerTool").then(
+    (mod) => ({ default: mod.PowerShellSessionManagerTool }),
+  ),
+);
 
 export const builtinRegistry: BuiltinRegistration[] = [
   {
     rendererKey: "environment-overview",
     icon: MonitorCog,
     component: EnvironmentOverviewTool,
+  },
+  {
+    rendererKey: "powershell-session-manager",
+    icon: TerminalSquare,
+    component: PowerShellSessionManagerTool,
   },
 ];
 
@@ -60,9 +73,8 @@ export function composeToolDefinitions(
 
     let component: ToolDefinition["component"] = null;
     let registration: BuiltinRegistration | undefined;
-    if (manifest.runtimeKind === "builtin") {
-      const key = manifest.builtinRenderer ?? "";
-      registration = byKey.get(key);
+    if (manifest.builtinRenderer) {
+      registration = byKey.get(manifest.builtinRenderer);
       // Don't throw — render a "missing renderer" placeholder in UI instead.
       component = registration?.component ?? null;
     }

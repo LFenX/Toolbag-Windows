@@ -1,19 +1,24 @@
-import type { ComponentType } from "react";
+import type { ComponentType, LazyExoticComponent } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import type { ToolManifest } from "../../shared/tauri/types";
 
-/// A built-in React renderer component registered for plugins whose
-/// `runtimeKind === "builtin"`. Other plugins use the declarative SchemaForm + ResultRenderer.
+export type ToolRendererComponent =
+  | ComponentType
+  | LazyExoticComponent<ComponentType>;
+
+/// A host-provided React renderer component. Most plugins use the
+/// declarative SchemaForm + ResultRenderer path; a small number of
+/// first-party tools can pair a host renderer with a sidecar runtime.
 export interface BuiltinRegistration {
   /// Matches `tool.json.builtinRenderer`.
   rendererKey: string;
   icon: LucideIcon;
-  component: ComponentType;
+  component: ToolRendererComponent;
 }
 
 export interface ToolDefinition extends Omit<ToolManifest, "icon"> {
   icon: LucideIcon;
   iconKey: string | null;
-  component: ComponentType | null;
+  component: ToolRendererComponent | null;
 }

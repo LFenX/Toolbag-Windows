@@ -13,6 +13,10 @@ import { AppUpdatePrompt } from "../../features/updates/AppUpdatePrompt";
 import { Sidebar } from "./Sidebar";
 import { StatusBar } from "./StatusBar";
 import { TabBar } from "./TabBar";
+import {
+  isTerminalKeyboardTarget,
+  prepareCloseToolTab,
+} from "./tab-close-guards";
 import { nextActiveAfterCycle, useTabsStore } from "./tab-store";
 import { useToolRouteSync } from "./useToolRouteSync";
 import { useWorkspaceStore } from "./workspace-store";
@@ -62,6 +66,9 @@ export function AppShell({ children }: PropsWithChildren) {
       if (!isMod) return;
       const key = event.key.toLowerCase();
       const target = event.target as HTMLElement | null;
+      if (isTerminalKeyboardTarget(target)) {
+        return;
+      }
       const isEditable =
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
@@ -96,21 +103,29 @@ export function AppShell({ children }: PropsWithChildren) {
         const idx = current.tabs.findIndex(
           (t) => t.instanceId === current.activeInstanceId,
         );
+        if (idx < 0) return;
+        const tab = current.tabs[idx];
+        const remainingTabs = current.tabs.filter(
+          (entry) => entry.instanceId !== current.activeInstanceId,
+        );
         let neighbor: typeof current.tabs[number] | undefined;
         if (idx > 0) {
           neighbor = current.tabs[idx - 1];
         } else if (idx + 1 < current.tabs.length) {
           neighbor = current.tabs[idx + 1];
         }
-        closeTab(current.activeInstanceId);
-        if (neighbor) {
-          void navigate({
-            to: "/tools/$toolId",
-            params: { toolId: neighbor.toolId },
-          });
-        } else {
-          void navigate({ to: "/" });
-        }
+        void prepareCloseToolTab(tab, remainingTabs).then((ok) => {
+          if (!ok) return;
+          closeTab(current.activeInstanceId ?? "");
+          if (neighbor) {
+            void navigate({
+              to: "/tools/$toolId",
+              params: { toolId: neighbor.toolId },
+            });
+          } else {
+            void navigate({ to: "/" });
+          }
+        });
         return;
       }
       if (key === "tab") {

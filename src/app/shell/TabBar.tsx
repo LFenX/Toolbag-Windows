@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { cn } from "../../shared/lib/utils";
 import { useTools } from "../../features/tools/useTools";
 import type { ToolDefinition } from "../../features/tools/types";
+import { prepareCloseToolTab } from "./tab-close-guards";
 import { useTabsStore } from "./tab-store";
 import type { ToolTab } from "./tab-store";
 
@@ -16,16 +17,16 @@ export function TabBar({ onAddClick }: { onAddClick: () => void }) {
   const closeTab = useTabsStore((s) => s.closeTab);
   const navigate = useNavigate();
   const { data: tools = [] } = useTools();
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   const toolMap = useMemo(() => {
     const map = new Map<string, ToolDefinition>();
-    for (const t of tools) map.set(t.id, t);
+    for (const tool of tools) {
+      map.set(tool.id, tool);
+    }
     return map;
   }, [tools]);
 
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-
-  // Keep the active tab scrolled into view.
   useEffect(() => {
     if (!activeInstanceId || !scrollerRef.current) return;
     const el = scrollerRef.current.querySelector<HTMLElement>(
@@ -39,47 +40,39 @@ export function TabBar({ onAddClick }: { onAddClick: () => void }) {
     void navigate({ to: "/tools/$toolId", params: { toolId: tab.toolId } });
   };
 
-  const handleClose = (
-    event: MouseEvent<HTMLButtonElement>,
-    tab: ToolTab,
-  ) => {
-    event.stopPropagation();
-    const wasActive = tab.instanceId === activeInstanceId;
-    const idx = tabs.findIndex((t) => t.instanceId === tab.instanceId);
-    closeTab(tab.instanceId);
-    if (wasActive) {
-      // After close, the store auto-focuses a neighbor — navigate to it so URL stays in sync.
-      const remaining = tabs.length - 1;
-      if (remaining === 0) {
-        void navigate({ to: "/" });
-      } else {
-        let neighbor: ToolTab | undefined;
-        if (idx > 0) {
-          neighbor = tabs[idx - 1];
-        } else if (idx + 1 < tabs.length) {
-          neighbor = tabs[idx + 1];
-        }
-        if (neighbor) {
-          void navigate({
-            to: "/tools/$toolId",
-            params: { toolId: neighbor.toolId },
-          });
-        }
-      }
+  const navigateAfterClose = (tab: ToolTab, idx: number) => {
+    if (tab.instanceId !== activeInstanceId) return;
+    if (tabs.length <= 1) {
+      void navigate({ to: "/" });
+      return;
     }
+    const neighbor = idx > 0 ? tabs[idx - 1] : tabs[idx + 1];
+    void navigate({
+      to: "/tools/$toolId",
+      params: { toolId: neighbor.toolId },
+    });
+  };
+
+  const handleClose = (event: MouseEvent<HTMLElement>, tab: ToolTab) => {
+    event.stopPropagation();
+    const idx = tabs.findIndex((entry) => entry.instanceId === tab.instanceId);
+    const remainingTabs = tabs.filter((entry) => entry.instanceId !== tab.instanceId);
+    void prepareCloseToolTab(tab, remainingTabs).then((ok) => {
+      if (!ok) return;
+      closeTab(tab.instanceId);
+      navigateAfterClose(tab, idx);
+    });
   };
 
   const handleMiddleClick = (
     event: MouseEvent<HTMLDivElement>,
     tab: ToolTab,
   ) => {
-    if (event.button === 1) {
-      event.preventDefault();
-      handleClose(event as unknown as MouseEvent<HTMLButtonElement>, tab);
-    }
+    if (event.button !== 1) return;
+    event.preventDefault();
+    handleClose(event, tab);
   };
 
-  // Empty state: a clear call-to-action so the bar isn't just dead chrome.
   if (tabs.length === 0) {
     return (
       <div className="flex h-11 items-center gap-2 border-b border-border bg-muted/40 px-3">
@@ -93,7 +86,11 @@ export function TabBar({ onAddClick }: { onAddClick: () => void }) {
           <span>打开工具</span>
         </button>
         <span className="text-[12px] text-muted-foreground">
-          没有打开的工具，点这里或按 <kbd className="rounded border border-border bg-background px-1 py-0.5 text-[10px]">Ctrl+T</kbd> 添加
+          没有打开的工具，点这里或按
+          <kbd className="mx-1 rounded border border-border bg-background px-1 py-0.5 text-[10px]">
+            Ctrl+T
+          </kbd>
+          添加
         </span>
       </div>
     );
@@ -111,6 +108,7 @@ export function TabBar({ onAddClick }: { onAddClick: () => void }) {
           const tool = toolMap.get(tab.toolId);
           const Icon = tool?.icon;
           const isActive = tab.instanceId === activeInstanceId;
+          const label = tool?.name ?? tab.toolName;
           return (
             <div
               key={tab.instanceId}
@@ -132,9 +130,8 @@ export function TabBar({ onAddClick }: { onAddClick: () => void }) {
                   ? "bg-background font-medium text-foreground"
                   : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
               )}
-              title={tool?.description ?? tab.toolName}
+              title={tool?.description ?? label}
             >
-              {/* Top accent strip makes the active tab pop. */}
               {isActive && (
                 <span
                   className="absolute inset-x-0 top-0 h-[2px] bg-primary"
@@ -143,20 +140,17 @@ export function TabBar({ onAddClick }: { onAddClick: () => void }) {
               )}
               {Icon ? (
                 <Icon
-                  className={cn(
-                    "size-4 shrink-0",
-                    isActive ? "text-primary" : "",
-                  )}
+                  className={cn("size-4 shrink-0", isActive && "text-primary")}
                   aria-hidden="true"
                 />
               ) : (
                 <span className="size-4 shrink-0 rounded-sm bg-muted" />
               )}
-              <span className="flex-1 truncate">{tool?.name ?? tab.toolName}</span>
+              <span className="flex-1 truncate">{label}</span>
               <button
                 type="button"
                 onClick={(event) => { handleClose(event, tab); }}
-                aria-label={`关闭 ${tool?.name ?? tab.toolName}`}
+                aria-label={`关闭 ${label}`}
                 className={cn(
                   "grid size-5 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground",
                   isActive ? "" : "opacity-0 group-hover:opacity-100",
@@ -167,8 +161,6 @@ export function TabBar({ onAddClick }: { onAddClick: () => void }) {
             </div>
           );
         })}
-        {/* Inline "+" — sits right after the last tab (browser convention)
-            and scrolls with the tab strip when there are many tabs. */}
         <button
           type="button"
           onClick={onAddClick}

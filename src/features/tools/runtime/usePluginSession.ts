@@ -1,3 +1,4 @@
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef } from "react";
 
 import {
@@ -5,6 +6,12 @@ import {
   shutdownPluginSession,
 } from "../../../shared/tauri/plugins";
 import { usePluginJob } from "./usePluginJob";
+
+export interface PluginSidecarEvent {
+  pluginId: string;
+  event: string;
+  data: unknown;
+}
 
 /**
  * Wrapper around `usePluginJob` for plugins declared with
@@ -19,12 +26,16 @@ import { usePluginJob } from "./usePluginJob";
  */
 export function usePluginSession(
   pluginId: string,
-  options: { autoShutdown?: boolean } = {},
+  options: {
+    autoShutdown?: boolean;
+    onEvent?: (event: PluginSidecarEvent) => void;
+  } = {},
 ) {
-  const { autoShutdown = true } = options;
+  const { autoShutdown = true, onEvent } = options;
   const job = usePluginJob(pluginId);
   const autoShutdownRef = useRef(autoShutdown);
   const pluginIdRef = useRef(pluginId);
+  const onEventRef = useRef(onEvent);
 
   useEffect(() => {
     autoShutdownRef.current = autoShutdown;
@@ -32,6 +43,36 @@ export function usePluginSession(
   useEffect(() => {
     pluginIdRef.current = pluginId;
   }, [pluginId]);
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
+  useEffect(() => {
+    let alive = true;
+    let unlisten: UnlistenFn | null = null;
+    const setup = async () => {
+      unlisten = await listen<PluginSidecarEvent>(
+        "plugin://sidecar-event",
+        (event) => {
+          if (event.payload.pluginId !== pluginIdRef.current) return;
+          onEventRef.current?.(event.payload);
+        },
+      );
+      if (!alive) {
+        unlisten();
+        unlisten = null;
+      }
+    };
+    if (onEventRef.current) {
+      void setup();
+    }
+    return () => {
+      alive = false;
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     return () => {

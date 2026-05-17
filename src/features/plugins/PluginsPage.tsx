@@ -43,7 +43,8 @@ export function PluginsPage() {
     onSuccess: invalidate,
   });
   const uninstallMutation = useMutation({
-    mutationFn: (id: string) => uninstallPlugin(id),
+    mutationFn: (payload: { id: string; deleteData?: boolean }) =>
+      uninstallPlugin(payload.id, payload.deleteData ?? false),
     onSuccess: () => {
       setConfirmingId(null);
       invalidate();
@@ -170,7 +171,9 @@ export function PluginsPage() {
         <ConfirmUninstall
           id={confirmingId}
           onCancel={() => { setConfirmingId(null); }}
-          onConfirm={() => { uninstallMutation.mutate(confirmingId); }}
+          onConfirm={(deleteData) => {
+            uninstallMutation.mutate({ id: confirmingId, deleteData });
+          }}
           pending={uninstallMutation.isPending}
           error={uninstallMutation.error?.message}
         />
@@ -283,10 +286,11 @@ function ConfirmUninstall({
 }: {
   id: string;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (deleteData: boolean) => void;
   pending: boolean;
   error?: string;
 }) {
+  const [deleteData, setDeleteData] = useState(false);
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/30 p-4 backdrop-blur-[2px]">
       <div className="w-full max-w-md rounded-lg border border-border bg-popover p-5 shadow-elevated">
@@ -306,6 +310,17 @@ function ConfirmUninstall({
             {error}
           </p>
         )}
+        <label className="mt-4 flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={deleteData}
+            onChange={(event) => { setDeleteData(event.currentTarget.checked); }}
+            className="mt-0.5"
+          />
+          <span>
+            同时删除插件数据目录。默认保留命令库、备注和日志，方便重新安装后继续使用。
+          </span>
+        </label>
         <div className="mt-5 flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={onCancel}>
             取消
@@ -313,7 +328,7 @@ function ConfirmUninstall({
           <Button
             size="sm"
             variant="destructive"
-            onClick={onConfirm}
+            onClick={() => { onConfirm(deleteData); }}
             disabled={pending}
           >
             {pending ? "卸载中…" : "确认卸载"}

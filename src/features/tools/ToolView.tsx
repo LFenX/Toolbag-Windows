@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft, Pause } from "lucide-react";
-import { memo, useMemo, useState } from "react";
+import { memo, Suspense, useMemo, useState } from "react";
 
 import { getPluginUiSchema } from "../../shared/tauri/plugins";
 import type { PluginUiSchema, UiField } from "../../shared/tauri/types";
@@ -57,7 +57,7 @@ function ToolRouter({ pluginId }: { pluginId: string }) {
     return null;
   }
 
-  if (tool.runtimeKind === "builtin") {
+  if (tool.builtinRenderer) {
     const reg = builtinRegistry.find(
       (r) => r.rendererKey === (tool.builtinRenderer ?? ""),
     );
@@ -65,7 +65,11 @@ function ToolRouter({ pluginId }: { pluginId: string }) {
       return <MissingRenderer id={pluginId} renderer={tool.builtinRenderer} />;
     }
     const Component = reg.component;
-    return <Component />;
+    return (
+      <Suspense fallback={<ToolLoading />}>
+        <Component />
+      </Suspense>
+    );
   }
 
   if (isLoading) {
@@ -241,6 +245,14 @@ function lookupCopySource(source: string, result: unknown) {
     value = (value as Record<string, unknown>)[part];
   }
   return value;
+}
+
+function ToolLoading() {
+  return (
+    <section className="grid h-full place-items-center text-sm text-muted-foreground">
+      正在加载工具...
+    </section>
+  );
 }
 
 function ToolNotFound({ id }: { id: string }) {

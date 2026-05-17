@@ -1,6 +1,6 @@
 [package]
 name = "toolbag"
-version = "0.2.1"
+version = "0.3.0"
 description = "A Windows-first local toolkit workbench."
 authors = ["LFen"]
 edition = "2021"

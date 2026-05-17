@@ -13,8 +13,8 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
-use std::process::{Child, ChildStdin};
+use std::path::{Path, PathBuf};
+use std::process::{Child, ChildStdin, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -206,12 +206,14 @@ impl Runner {
         true
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn start(
         self: &Arc<Self>,
         app: AppHandle,
         database: Arc<Database>,
         manifest: PluginManifest,
         plugin_dir: PathBuf,
+        plugin_data_dir: PathBuf,
         command: String,
         params: Value,
     ) -> AppResult<String> {
@@ -222,9 +224,27 @@ impl Runner {
         if matches!(manifest.runtime.kind, RuntimeKind::Sidecar)
             && manifest.runtime.lifecycle == SidecarLifecycle::Persistent
         {
-            self.start_persistent(app, database, manifest, plugin_dir, command, params, job_id)
+            self.start_persistent(
+                app,
+                database,
+                manifest,
+                plugin_dir,
+                plugin_data_dir,
+                command,
+                params,
+                job_id,
+            )
         } else {
-            self.start_ephemeral(app, database, manifest, plugin_dir, command, params, job_id)
+            self.start_ephemeral(
+                app,
+                database,
+                manifest,
+                plugin_dir,
+                plugin_data_dir,
+                command,
+                params,
+                job_id,
+            )
         }
     }
 
@@ -235,6 +255,7 @@ impl Runner {
         database: Arc<Database>,
         manifest: PluginManifest,
         plugin_dir: PathBuf,
+        plugin_data_dir: PathBuf,
         command: String,
         params: Value,
         job_id: String,
@@ -251,6 +272,7 @@ impl Runner {
                 app.clone(),
                 manifest.clone(),
                 plugin_dir,
+                plugin_data_dir,
                 command.clone(),
                 job_id_clone.clone(),
                 params,
@@ -311,12 +333,18 @@ impl Runner {
         database: Arc<Database>,
         manifest: PluginManifest,
         plugin_dir: PathBuf,
+        plugin_data_dir: PathBuf,
         command: String,
         params: Value,
         job_id: String,
     ) -> AppResult<String> {
-        let session =
-            self.get_or_spawn_session(app.clone(), database.clone(), &manifest, &plugin_dir)?;
+        let session = self.get_or_spawn_session(
+            app.clone(),
+            database.clone(),
+            &manifest,
+            &plugin_dir,
+            &plugin_data_dir,
+        )?;
         if let Ok(mut jobs) = session.active_jobs.lock() {
             jobs.insert(
                 job_id.clone(),
@@ -349,7 +377,8 @@ impl Runner {
         app: AppHandle,
         database: Arc<Database>,
         manifest: &PluginManifest,
-        plugin_dir: &std::path::Path,
+        plugin_dir: &Path,
+        plugin_data_dir: &Path,
     ) -> AppResult<Arc<PersistentSession>> {
         let mut sessions = self
             .sessions
@@ -371,11 +400,7 @@ impl Runner {
             ));
         }
 
-        let mut cmd = std::process::Command::new(&binary_path);
-        cmd.args(&manifest.runtime.args);
-        for (k, v) in &manifest.runtime.env {
-            cmd.env(k, v);
-        }
+        let mut cmd = build_sidecar_command(&binary_path, manifest, plugin_dir, plugin_data_dir);
         cmd.stdin(std::process::Stdio::piped());
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
@@ -414,6 +439,7 @@ impl Runner {
         app: AppHandle,
         manifest: PluginManifest,
         plugin_dir: PathBuf,
+        plugin_data_dir: PathBuf,
         command: String,
         job_id: String,
         params: Value,
@@ -448,9 +474,16 @@ impl Runner {
                     cancel,
                 })
             }
-            RuntimeKind::Sidecar => {
-                self.dispatch_sidecar(app, manifest, plugin_dir, command, job_id, params, cancel)
-            }
+            RuntimeKind::Sidecar => self.dispatch_sidecar(
+                app,
+                manifest,
+                plugin_dir,
+                plugin_data_dir,
+                command,
+                job_id,
+                params,
+                cancel,
+            ),
             RuntimeKind::None => Err(AppError::coded(
                 ErrorCode::Protocol,
                 "纯 UI 工具不应调用 start_plugin_command",
@@ -464,6 +497,7 @@ impl Runner {
         app: AppHandle,
         manifest: PluginManifest,
         plugin_dir: PathBuf,
+        plugin_data_dir: PathBuf,
         command: String,
         job_id: String,
         params: Value,
@@ -481,11 +515,7 @@ impl Runner {
             ));
         }
 
-        let mut cmd = std::process::Command::new(&binary_path);
-        cmd.args(&manifest.runtime.args);
-        for (k, v) in &manifest.runtime.env {
-            cmd.env(k, v);
-        }
+        let mut cmd = build_sidecar_command(&binary_path, &manifest, &plugin_dir, &plugin_data_dir);
         cmd.stdin(std::process::Stdio::piped());
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
@@ -556,6 +586,9 @@ impl Runner {
                         }),
                     );
                 }
+                "event" => {
+                    emit_sidecar_event(&app, &manifest.id, frame.event, frame.data);
+                }
                 "result" => {
                     final_result = frame.data;
                     break;
@@ -583,6 +616,42 @@ impl Runner {
             )),
         }
     }
+}
+
+fn build_sidecar_command(
+    binary_path: &Path,
+    manifest: &PluginManifest,
+    plugin_dir: &Path,
+    plugin_data_dir: &Path,
+) -> Command {
+    let mut cmd = Command::new(binary_path);
+    cmd.args(&manifest.runtime.args);
+    for (k, v) in &manifest.runtime.env {
+        cmd.env(k, v);
+    }
+    cmd.env("TOOLBAG_PLUGIN_ID", &manifest.id);
+    cmd.env("TOOLBAG_PLUGIN_DIR", plugin_dir);
+    cmd.env("TOOLBAG_PLUGIN_DATA_DIR", plugin_data_dir);
+    cmd
+}
+
+fn emit_sidecar_event(
+    app: &AppHandle,
+    plugin_id: &str,
+    event: Option<String>,
+    data: Option<Value>,
+) {
+    let Some(event) = event else {
+        return;
+    };
+    let _ = app.emit(
+        "plugin://sidecar-event",
+        serde_json::json!({
+            "pluginId": plugin_id,
+            "event": event,
+            "data": data.unwrap_or(Value::Null),
+        }),
+    );
 }
 
 /// Reader thread for a persistent sidecar. Fans NDJSON response frames out to
@@ -634,6 +703,9 @@ fn persistent_reader_loop(
                         "message": frame.message.unwrap_or_default(),
                     }),
                 );
+            }
+            "event" => {
+                emit_sidecar_event(&app, &plugin_id, frame.event, frame.data);
             }
             "result" => {
                 let info = finalize_job(&session, &job_id);
@@ -720,6 +792,14 @@ fn persistent_reader_loop(
     if let Ok(mut sessions) = runner.sessions.lock() {
         sessions.remove(&plugin_id);
     }
+    let _ = app.emit(
+        "plugin://sidecar-event",
+        serde_json::json!({
+            "pluginId": plugin_id,
+            "event": "manager.sidecarExit",
+            "data": { "reason": "eof" },
+        }),
+    );
     // Reap the child if it's still around.
     if let Ok(mut child_guard) = session.child.lock() {
         if let Some(mut child) = child_guard.take() {
@@ -771,11 +851,86 @@ struct SidecarFrame {
     #[serde(default)]
     code: Option<String>,
     #[serde(default)]
+    event: Option<String>,
+    #[serde(default)]
     data: Option<Value>,
 }
 
 impl Default for Runner {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::RiskLevel;
+    use crate::plugins::manifest::{PluginRuntime, SidecarLifecycle};
+
+    fn sidecar_manifest() -> PluginManifest {
+        PluginManifest {
+            schema: None,
+            id: "com.lfen.toolbag.test".to_string(),
+            name: "Test".to_string(),
+            version: "1.0.0".to_string(),
+            category: "开发".to_string(),
+            tags: vec![],
+            description: "test".to_string(),
+            detail_description: "test".to_string(),
+            author: None,
+            license: None,
+            homepage: None,
+            min_app_version: None,
+            max_app_version: None,
+            risk_level: RiskLevel::Caution,
+            requires_elevation: false,
+            permission_requirement: String::new(),
+            data_access: String::new(),
+            icon: None,
+            runtime: PluginRuntime {
+                kind: RuntimeKind::Sidecar,
+                binary: Some("bin/test.exe".to_string()),
+                args: vec!["--flag".to_string()],
+                env: [("CUSTOM_ENV".to_string(), "ok".to_string())].into(),
+                startup_timeout_ms: 3000,
+                shutdown_timeout_ms: 1500,
+                lifecycle: SidecarLifecycle::Persistent,
+            },
+            commands: vec![],
+            ui: Some("ui.json".to_string()),
+            builtin_renderer: Some("test-renderer".to_string()),
+            bundled: false,
+        }
+    }
+
+    #[test]
+    fn build_sidecar_command_injects_plugin_environment() {
+        let manifest = sidecar_manifest();
+        let cmd = build_sidecar_command(
+            Path::new("plugin/bin/test.exe"),
+            &manifest,
+            Path::new("plugin"),
+            Path::new("plugin/data"),
+        );
+        let envs: HashMap<String, String> = cmd
+            .get_envs()
+            .filter_map(|(key, value)| {
+                Some((
+                    key.to_string_lossy().to_string(),
+                    value?.to_string_lossy().to_string(),
+                ))
+            })
+            .collect();
+
+        assert_eq!(cmd.get_program(), Path::new("plugin/bin/test.exe"));
+        assert_eq!(cmd.get_args().count(), 1);
+        assert_eq!(envs.get("TOOLBAG_PLUGIN_ID"), Some(&manifest.id));
+        assert_eq!(envs.get("TOOLBAG_PLUGIN_DIR"), Some(&"plugin".to_string()));
+        assert_eq!(
+            envs.get("TOOLBAG_PLUGIN_DATA_DIR"),
+            Some(&"plugin/data".to_string())
+        );
+        assert_eq!(envs.get("CUSTOM_ENV"), Some(&"ok".to_string()));
     }
 }

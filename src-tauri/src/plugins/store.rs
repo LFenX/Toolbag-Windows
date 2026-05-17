@@ -220,14 +220,14 @@ impl PluginStore {
         })
     }
 
-    pub fn uninstall(&self, id: &str) -> AppResult<()> {
+    pub fn uninstall(&self, id: &str, delete_data: bool) -> AppResult<()> {
         let installer = Installer {
             plugins_root: &self.plugins_root,
             staging_root: &self.staging_root,
             app_version: APP_VERSION,
             database: &self.database,
         };
-        installer.uninstall(id)
+        installer.uninstall(id, delete_data)
     }
 
     pub fn set_disabled(&self, id: &str, disabled: bool) -> AppResult<()> {
@@ -261,6 +261,8 @@ impl PluginStore {
         if row.disabled {
             return Err(AppError::coded(ErrorCode::Perm, "插件已禁用"));
         }
+        let data_dir = self.plugins_root.join(plugin_id).join("data");
+        std::fs::create_dir_all(&data_dir)?;
         // For commands that declare permissions, ensure granted_perms cover them.
         let granted: std::collections::HashSet<&String> = row.granted_perms.iter().collect();
         if let Some(spec) = manifest.commands.iter().find(|c| c.id == command) {
@@ -278,6 +280,7 @@ impl PluginStore {
             Arc::clone(&self.database),
             manifest,
             dir,
+            data_dir,
             command,
             params,
         )
