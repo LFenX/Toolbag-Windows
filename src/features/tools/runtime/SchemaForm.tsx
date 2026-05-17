@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Button } from "../../../shared/ui/button";
 import { Input } from "../../../shared/ui/input";
 import { Switch } from "../../../shared/ui/switch";
-import { Badge } from "../../../shared/ui/badge";
 import { cn } from "../../../shared/lib/utils";
 import type { UiField, UiSection } from "../../../shared/tauri/types";
 import { evalBool } from "./expr";
@@ -103,11 +102,6 @@ function FieldRow({
         {field.label}
         {field.required && <span className="ml-1 text-destructive">*</span>}
       </label>
-      {"type" in field && (
-        <Badge variant="outline" className="capitalize">
-          {field.type}
-        </Badge>
-      )}
     </div>
   ) : null;
 
@@ -151,6 +145,7 @@ function FieldInput({
           id={field.key}
           rows={field.rows ?? 4}
           value={typeof value === "string" ? value : field.default ?? ""}
+          placeholder={field.placeholder}
           disabled={disabled}
           onChange={(e) => { onChange(e.target.value); }}
           className={cn(

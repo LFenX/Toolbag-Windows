@@ -228,6 +228,7 @@ export interface UiTextareaField extends FieldBase {
   type: "textarea";
   rows?: number;
   monospace?: boolean;
+  placeholder?: string;
   default?: string;
 }
 export interface UiNumberField extends FieldBase {
