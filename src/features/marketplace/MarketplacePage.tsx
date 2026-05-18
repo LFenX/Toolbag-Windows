@@ -16,12 +16,17 @@ import { Badge } from "../../shared/ui/badge";
 import { Button } from "../../shared/ui/button";
 import { Input } from "../../shared/ui/input";
 import { useTools } from "../tools/useTools";
-import { useInstallPlugin, useRegistry } from "./useRegistry";
+import {
+  useInstallPlugin,
+  useRefreshRegistry,
+  useRegistry,
+} from "./useRegistry";
 
 export function MarketplacePage() {
   const { data: registry, refetch, isFetching, isError } = useRegistry();
   const { data: installed = [] } = useTools();
   const installMutation = useInstallPlugin();
+  const refreshMutation = useRefreshRegistry();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -68,13 +73,20 @@ export function MarketplacePage() {
           <Button
             size="sm"
             variant="outline"
-            disabled={isFetching}
+            disabled={isFetching || refreshMutation.isPending}
             onClick={() => {
-              void refetch();
+              refreshMutation.mutate(undefined, {
+                onError: () => {
+                  void refetch();
+                },
+              });
             }}
           >
             <RefreshCw
-              className={cn("size-4", isFetching && "animate-spin")}
+              className={cn(
+                "size-4",
+                (isFetching || refreshMutation.isPending) && "animate-spin",
+              )}
               aria-hidden="true"
             />
             刷新

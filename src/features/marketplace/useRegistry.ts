@@ -17,6 +17,18 @@ export function useRegistry(forceRefresh = false) {
   });
 }
 
+export function useRefreshRegistry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => listRegistryPlugins(true),
+    onSuccess: (registry) => {
+      qc.setQueryData(["registry", false], registry);
+      qc.setQueryData(["registry", true], registry);
+      qc.setQueryData(["registry-passive"], registry);
+    },
+  });
+}
+
 export function useInstallPlugin() {
   const qc = useQueryClient();
   return useMutation({
