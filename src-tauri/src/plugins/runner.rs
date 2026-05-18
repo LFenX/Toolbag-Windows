@@ -19,6 +19,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
@@ -30,6 +33,9 @@ use crate::plugins::manifest::{PluginManifest, RuntimeKind, SidecarLifecycle};
 
 pub type BuiltinHandler =
     Box<dyn Fn(BuiltinCallContext) -> AppResult<Value> + Send + Sync + 'static>;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 pub struct BuiltinCallContext {
     pub app: AppHandle,
@@ -625,6 +631,8 @@ fn build_sidecar_command(
     plugin_data_dir: &Path,
 ) -> Command {
     let mut cmd = Command::new(binary_path);
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.args(&manifest.runtime.args);
     for (k, v) in &manifest.runtime.env {
         cmd.env(k, v);

@@ -21,7 +21,7 @@ export async function listRegistryPlugins(
     return {
       schemaVersion: 1,
       generatedAt: new Date().toISOString(),
-      appVersion: { stable: "0.3.1" },
+      appVersion: { stable: "0.3.2" },
       categories: [],
       plugins: [],
       source: "bundled",
